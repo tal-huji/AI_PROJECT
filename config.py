@@ -10,7 +10,7 @@ hyperparams = {
 
     # Common parameters for both QN and DQN
     'seed': 42,  # Random seed for reproducibility (used in both QN and DQN)
-    'n_episodes': 100000,  # Number of episodes for training (both QN and DQN)
+    'n_episodes': 10000,  # Number of episodes for training (both QN and DQN)
     'positions': [-1,0, 1],  # Available actions (hold, sell, buy) - used in both QN and DQN
     'discount_factor': 0.99,  # Discount factor (gamma) for future rewards (both QN and DQN)
     'exploration_rate': 1.0,  # Starting exploration rate (epsilon) for both QN and DQN
@@ -37,7 +37,7 @@ dynamic_features_arr = [
     # Adjusted Close SMA Ratios
     lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=20),
     lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=50),
-    lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=200),
+    # lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=200),
 
     # # RSI with different windows
     # lambda history: dynamic_features.dynamic_feature_rsi(history, window=14),

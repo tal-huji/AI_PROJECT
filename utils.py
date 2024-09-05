@@ -7,7 +7,9 @@ import matplotlib.pyplot as plt
 from gym_trading_env.utils.history import History
 from matplotlib.pyplot import title
 from config import hyperparams
-
+import inspect
+import pandas as pd
+import numpy as np
 from config import hyperparams
 from config import dynamic_features_arr
 
@@ -48,10 +50,23 @@ def plot_performance(train_performance, test_performance, train_market_values, t
     learning_rate = hyperparams['learning_rate']
     positions = hyperparams['positions']
 
+    # Dynamic features (printing their names)
+    dynamic_features_names = []
+    for dynamic_feature in dynamic_features_arr:
+        # Get the source code (name) of the lambda function
+        feature_name = inspect.getsource(dynamic_feature).strip()
+
+        # Remove the unwanted part before "dynamic_feature_"
+        feature_name = feature_name.split("dynamic_feature_", 1)[-1]
+
+        dynamic_features_names.append(feature_name)
+
+    # Create a string representation of dynamic features
+    dynamic_features_str = "\n".join(dynamic_features_names)
 
     title += f'Episodes: {n_episodes}, Dynamic Features: {n_dynamic_features}, Learning Rate: {learning_rate} | Positions: {positions}\n'
-    title+= f'Start Train: {start_train}, End Train: {end_train}, Start Test: {start_test}\n'
-    title += f'Dynamic Features: {dynamic_features_arr}\n'
+    title += f'Start Train: {start_train}, End Train: {end_train}, Start Test: {start_test}\n'
+    title += f'Dynamic Features:\n{dynamic_features_str}\n'  # Add the names of dynamic features to the title
 
     if algorithm_name == 'dqn':
         title += f'Hidden Layer Size: {hyperparams["hidden_layer_size"]}, Memory Size: {hyperparams["memory_size"]}, Batch Size: {hyperparams["batch_size"]}\n'
@@ -77,8 +92,6 @@ def plot_performance(train_performance, test_performance, train_market_values, t
     plt.show()
 
 
-import pandas as pd
-import numpy as np
 
 
 def compute_min_max_for_features(df_train, dynamic_features_arr):
