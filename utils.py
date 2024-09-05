@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import yfinance as yf
 import matplotlib.pyplot as plt
+from gym_trading_env.utils.history import History
 from matplotlib.pyplot import title
 from config import hyperparams
 
@@ -48,11 +49,15 @@ def plot_performance(train_performance, test_performance, train_market_values, t
     positions = hyperparams['positions']
 
 
-    title += f'Episodes: {n_episodes}, Dynamic Features: {n_dynamic_features}, Learning Rate: {learning_rate} | Positions\n'
+    title += f'Episodes: {n_episodes}, Dynamic Features: {n_dynamic_features}, Learning Rate: {learning_rate} | Positions: {positions}\n'
     title+= f'Start Train: {start_train}, End Train: {end_train}, Start Test: {start_test}\n'
+    title += f'Dynamic Features: {dynamic_features_arr}\n'
 
     if algorithm_name == 'dqn':
         title += f'Hidden Layer Size: {hyperparams["hidden_layer_size"]}, Memory Size: {hyperparams["memory_size"]}, Batch Size: {hyperparams["batch_size"]}\n'
+
+    if algorithm_name == 'q-learning':
+        title += f'Num Bins: {hyperparams["num_bins"]}\n'
 
     ax1.set_title(title)
     ax1.set_xlabel('Date')
@@ -71,4 +76,67 @@ def plot_performance(train_performance, test_performance, train_market_values, t
     plt.tight_layout()
     plt.show()
 
+
+import pandas as pd
+import numpy as np
+
+
+def compute_min_max_for_features(df_train, dynamic_features_arr):
+    """
+    Compute the min and max values for each active dynamic feature in the training data.
+
+    Parameters:
+    - df_train: A DataFrame of the historical training data.
+    - dynamic_features_arr: List of active dynamic features (lambdas).
+
+    Returns:
+    - min_max_array: List of tuples containing min and max values for each feature, in the correct order.
+    """
+    # Make a copy of the DataFrame
+    df_train_copy = df_train.copy()
+
+    # Initialize the History object
+    history = History(max_size=100000)
+
+    # Initialize history storage using the set function (set the first row)
+    first_row = df_train_copy.iloc[0]
+    history.set(
+        idx=0,
+        date=first_row.name,
+        position=0,  # Example: Initial position as 0
+        real_position=0,
+        data=first_row.to_dict()
+    )
+
+    min_max_array = []  # Renamed to min_max_array
+
+    # Iterate through each dynamic feature in dynamic_features_arr
+    for dynamic_feature in dynamic_features_arr:
+        feature_min = np.inf
+        feature_max = -np.inf
+
+        # Loop through each row of the DataFrame for the given feature
+        for i in range(1, len(df_train_copy)):  # Start from 1 to allow windows to be applied
+            row = df_train_copy.iloc[i]
+
+            # Add current row data to history using the add function
+            history.add(
+                idx=i,
+                date=row.name,
+                position=0,  # Example: Position is static for simplicity
+                real_position=0,  # Example: Real position is static
+                data=row.to_dict()
+            )
+
+            # Compute the feature value using the dynamic feature
+            feature_value = dynamic_feature(history)
+
+            # Update the min and max for this feature
+            feature_min = min(feature_min, feature_value)
+            feature_max = max(feature_max, feature_value)
+
+        # Store the min and max for this feature in the correct order
+        min_max_array.append((feature_min, feature_max))
+
+    return min_max_array
 

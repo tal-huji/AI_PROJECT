@@ -4,8 +4,8 @@ import dynamic_features
 hyperparams = {
     # Common parameters for both QN and DQN
     'seed': 42,  # Random seed for reproducibility (used in both QN and DQN)
-    'n_episodes': 1000000,  # Number of episodes for training (both QN and DQN)
-    'positions': [-1, 0, 1],  # Available actions (hold, sell, buy) - used in both QN and DQN
+    'n_episodes': 10000,  # Number of episodes for training (both QN and DQN)
+    'positions': [-1,0, 1],  # Available actions (hold, sell, buy) - used in both QN and DQN
     'discount_factor': 0.99,  # Discount factor (gamma) for future rewards (both QN and DQN)
     'exploration_rate': 1.0,  # Starting exploration rate (epsilon) for both QN and DQN
     'exploration_decay': 0.995,  # Decay rate of exploration (both QN and DQN)
@@ -17,7 +17,7 @@ hyperparams = {
     'learning_rate': 0.01,  # Learning rate for updating Q-values (used in both QN and DQN)
 
     # QN-specific parameters
-    'num_bins': 20,  # Number of bins for discretization (QN-specific)
+    'num_bins': 3,
 
     # DQN-specific parameters
     'hidden_layer_size': 64,  # DQN-specific: Size of hidden layers in the neural network
@@ -33,7 +33,7 @@ dynamic_features_arr = [
     lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=50),
     # lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=200),
 
-    # RSI with different windows
+    # # RSI with different windows
     # lambda history: dynamic_features.dynamic_feature_rsi(history, window=14),
     # lambda history: dynamic_features.dynamic_feature_rsi(history, window=7),
     # lambda history: dynamic_features.dynamic_feature_rsi(history, window=21),
@@ -67,7 +67,6 @@ dynamic_features_arr = [
     # lambda history: dynamic_features.dynamic_feature_price_diff(history, window=10),
     #
     # lambda history: dynamic_features.dynamic_feature_daily_return(history),
-    #
     # lambda history: dynamic_features.dynamic_feature_high_low_range(history),
     #
     # lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=20),

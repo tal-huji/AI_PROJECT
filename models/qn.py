@@ -1,16 +1,15 @@
-from collections import defaultdict
 import numpy as np
 import random
+from collections import defaultdict
 from config import dynamic_features_arr, hyperparams
 from models.agent import Agent
 from online_normalization import OnlineNormalization
 
 
 class QLearningAgent(Agent):
-    def __init__(self, train_env, test_env, action_size):
+    def __init__(self, train_env, test_env, action_size, min_max_array):
         self.train_env = train_env
         self.test_env = test_env
-        self.n_bins = hyperparams['num_bins']
         self.action_size = action_size
         self.learning_rate = hyperparams['learning_rate']
         self.discount_factor = hyperparams['discount_factor']
@@ -18,56 +17,70 @@ class QLearningAgent(Agent):
         self.exploration_decay = hyperparams['exploration_decay']
         self.exploration_min = hyperparams['exploration_min']
 
-        # Fixed bins for discretization
-        self.bins = [np.linspace(-1, 1, self.n_bins + 1) for _ in range(len(dynamic_features_arr))]
+        # Use the ordered min_max_array (array of tuples with min and max for each feature)
+        self.min_max_array = min_max_array
+        self.num_bins = hyperparams['num_bins']  # Use 20 bins as per your request
 
-        # Q-table initialized using defaultdict
+        # Initialize Q-table (discrete state, action pairs)
         self.q_table = defaultdict(lambda: np.zeros(action_size))
 
-        # Initialize online normalization
-        self.normalizer = OnlineNormalization(len(dynamic_features_arr))
-
-    def _get_discrete_state(self, state):
+    def _discretize_state(self, state):
         """
-        Convert continuous state to a discrete state using pre-defined fixed bins.
-        Handle potential multidimensional state arrays.
+        Convert continuous state to a discrete state using 20 bins for each feature.
+        Flatten the state if it's multi-dimensional and use the ordered min_max_array.
+        Use numpy.linspace() to ensure consistent binning.
         """
         if isinstance(state, np.ndarray):
             state = state.flatten()  # Flatten the array if it's multidimensional
         elif isinstance(state, list):
             state = np.array(state).flatten()  # Convert to numpy array and flatten
 
-        # Update the normalization statistics and normalize the state
-        self.normalizer.update(state)
-        normalized_state = self.normalizer.normalize(state)
+        discrete_state = []
+        for i, value in enumerate(state):
+            min_val, max_val = self.min_max_array[i]  # Use the i-th tuple from min_max_array
 
-        discretized = self.discretize_state(normalized_state, self.bins)
-        return tuple(discretized)  # Return as tuple for indexing into the Q-table
+            # Handle cases where min_val and max_val are the same (no range)
+            if max_val == min_val:
+                bin_index = 0  # If no range, assign to the first bin
+            else:
+                # Generate bin edges using linspace between min_val and max_val with num_bins
+                bin_edges = np.linspace(min_val, max_val, self.num_bins + 1)
 
-    def discretize_state(self, state, bins):
-        """
-        Discretize continuous feature values into discrete bins.
-        """
-        return tuple(np.digitize(feature, bin_edges) - 1 for feature, bin_edges in zip(state, bins))
+                # Find the bin index where the value belongs
+                bin_index = np.digitize(value, bin_edges) - 1
+
+                # Ensure bin_index is within the valid range [0, num_bins - 1]
+                bin_index = min(max(bin_index, 0), self.num_bins - 1)
+
+            discrete_state.append(bin_index)
+
+        # Convert the discrete state list to a tuple to use as a key in Q-table
+        return tuple(discrete_state)
 
     def choose_action(self, state):
         """
         Choose an action based on the Q-table or exploration.
         """
-        discrete_state = self._get_discrete_state(state)
+
+
+
+
+        discrete_state = self._discretize_state(state)
         if np.random.rand() < self.exploration_rate:
             return random.randint(0, self.action_size - 1)
         else:
-            return int(np.argmax(self.q_table[discrete_state]))
+            return np.argmax(self.q_table[discrete_state])
+
 
     def learn(self, state, action, reward, next_state, done):
         """
         Update Q-table using the Q-learning algorithm.
         """
-        discrete_state = self._get_discrete_state(state)
-        next_discrete_state = self._get_discrete_state(next_state)
+        discrete_state = self._discretize_state(state)
+        next_discrete_state = self._discretize_state(next_state)
 
         current_q = self.q_table[discrete_state][action]
+
         if not done:
             best_future_q = np.max(self.q_table[next_discrete_state])
             new_q = (1 - self.learning_rate) * current_q + self.learning_rate * (
@@ -108,6 +121,12 @@ class QLearningAgent(Agent):
 
             print(f"Episode {episode + 1}/{n_episodes}, Total Reward: {total_reward}")
 
+
+            for key, value in self.q_table.items():
+                # Convert each element of the key tuple to a Python int
+                clean_key = tuple(int(k) for k in key)
+                print(clean_key, value)
+
         return last_episode_portfolio_values
 
     def test_agent(self):
@@ -132,3 +151,5 @@ class QLearningAgent(Agent):
 
         print(f"Test reward: {total_reward}")
         return total_reward, values_over_time
+
+

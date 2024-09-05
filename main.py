@@ -1,6 +1,6 @@
 # main.py
 from models.qn import QLearningAgent
-from utils import fetch_data, plot_performance, set_all_seeds
+from utils import fetch_data, plot_performance, set_all_seeds, compute_min_max_for_features
 from env_utils import create_trading_env
 from models.dqn import DQNAgent
 from config import hyperparams
@@ -32,7 +32,8 @@ def main(agent_type='q-learning'):
 
     # Initialize Q-Learning agent
     if agent_type == 'q-learning':
-        agent = QLearningAgent(env_train, env_test, action_size)
+        min_max_dict = compute_min_max_for_features(df_train, dynamic_features_arr)
+        agent = QLearningAgent(env_train, env_test, action_size, min_max_dict)
     elif agent_type == 'dqn':
         agent = DQNAgent(state_shape, action_size)
     else:
