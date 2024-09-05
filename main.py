@@ -14,10 +14,10 @@ def main(agent_type='q-learning'):
 
     # Fetch data
     ticker = 'INTC'
-    start_train = '2023-01-01'
-    end_train = '2024-01-01'
-    start_test = '2024-01-01'
-    end_test = None
+    start_train = hyperparams['start_train']
+    end_train = hyperparams['end_train']
+    start_test = hyperparams['start_test']
+    end_test = hyperparams['end_test']
 
     df_train = fetch_data(ticker, start_train, end_train)
     df_test = fetch_data(ticker, start_test, end_test)
