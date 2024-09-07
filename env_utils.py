@@ -32,6 +32,7 @@ def create_trading_env(df, dynamic_features):
         windows=windows,
         verbose=verbose,
         dynamic_feature_functions=dynamic_features,
+        initial_position=hyperparams['initial_position'],
         # reward_function=custom_reward_function
     )
 

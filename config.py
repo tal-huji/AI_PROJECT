@@ -1,29 +1,32 @@
 # config.py
 import dynamic_features
+import numpy as np
 
 hyperparams = {
     # General parameters
-    'start_train': '2023-01-01',
+    'start_train': '2020-01-01',
     'end_train': '2024-01-01',
     'start_test': '2024-01-01',
-    'end_test': None,
+    'end_test':  '2024-02-01',
 
-    # Common parameters for both QN and DQN
+    'initial_position': 1,  # Initial position (1=long, -1=short, 0=cash)  ,
+
+    # Common parameters for both QL and DQN
     'seed': 42,  # Random seed for reproducibility (used in both QN and DQN)
-    'n_episodes': 10000,  # Number of episodes for training (both QN and DQN)
-    'positions': [-1,0, 1],  # Available actions (hold, sell, buy) - used in both QN and DQN
-    'discount_factor': 0.99,  # Discount factor (gamma) for future rewards (both QN and DQN)
-    'exploration_rate': 1.0,  # Starting exploration rate (epsilon) for both QN and DQN
+    'n_episodes': 100,  # Number of episodes for training (both QN and DQN)
+    'positions': [-1,0,1],  # Available actions (hold, sell, buy) - used in both QN and DQN
+    'discount_factor': 0,  # Discount factor (gamma) for future rewards (both QN and DQN)
+    'exploration_rate': 0,  # Starting exploration rate (epsilon) for both QN and DQN
     'exploration_decay': 0.995,  # Decay rate of exploration (both QN and DQN)
     'exploration_min': 0.01,  # Minimum exploration rate (both QN and DQN)
     'trading_fees': 0.01,  # Trading fees applied on each trade (both QN and DQN)
     'portfolio_initial_value': 10000,  # Initial portfolio value for both QN and DQN
-    'windows': 1,  # Window size for calculating features (both QN and DQN)
+    'windows': 1,
     'verbose': 1,  # Verbosity level (both QN and DQN)
-    'learning_rate': 0.01,  # Learning rate for updating Q-values (used in both QN and DQN)
+    'learning_rate': 0.001,  # Learning rate for updating Q-values (used in both QN and DQN)
 
     # QN-specific parameters
-    'num_bins': 3,
+    'num_bins':2,
 
     # DQN-specific parameters
     'hidden_layer_size': 64,  # DQN-specific: Size of hidden layers in the neural network
@@ -31,66 +34,31 @@ hyperparams = {
     'batch_size': 16,  # DQN-specific: Batch size for training the neural network
 }
 
-dynamic_features_arr = [
-    # dynamic_features.dynamic_feature_last_position_taken,
-    # dynamic_features.dynamic_feature_real_position,
-    # Adjusted Close SMA Ratios
-    lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=20),
-    lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=50),
-    # lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=200),
 
-    # # RSI with different windows
-    # lambda history: dynamic_features.dynamic_feature_rsi(history, window=14),
-    # lambda history: dynamic_features.dynamic_feature_rsi(history, window=7),
-    # lambda history: dynamic_features.dynamic_feature_rsi(history, window=21),
+def get_discrete_value(value, bins):
+    return np.digitize(value, bins)
+
+dynamic_features_arr = [
+    lambda history:get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=3),
+                                      bins=np.linspace(-0.01, 0.01, hyperparams['num_bins'])),
+
+    lambda history:get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=7),
+                                      bins=np.linspace(-0.05, 0.05, hyperparams['num_bins'])),
+
+    lambda history:get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=14),
+                                      bins=np.linspace(-0.1, 0.1, hyperparams['num_bins'])),
+
+    lambda history:get_discrete_value(dynamic_features.dynamic_feature_rsi(history, window=14),
+                                      bins=[0, 30, 70, 100]),
+
+    # lambda history: get_discrete_value(dynamic_features.dynamic_feature_bollinger_bands(history, window=7)[0],
+    #                                    bins=[-1, 0, 1]),
     #
-    # # MACD
-    # lambda history: dynamic_features.dynamic_feature_macd(history),
+    # lambda history: get_discrete_value(dynamic_features.dynamic_feature_bollinger_bands(history, window=7)[1],
+    #                                     bins=[-1, 0, 1]),
     #
-    # # Bollinger Bands (middle, upper, lower)
-    # lambda history: dynamic_features.dynamic_feature_bollinger_bands(history, window=20, num_std=2)[0],
-    # lambda history: dynamic_features.dynamic_feature_bollinger_bands(history, window=20, num_std=2)[1],
-    # lambda history: dynamic_features.dynamic_feature_bollinger_bands(history, window=20, num_std=2)[2],
-    #
-    # # On-Balance Volume (OBV)
-    # lambda history: dynamic_features.dynamic_feature_obv(history),
-    #
-    # # Average Directional Index (ADX)
-    # lambda history: dynamic_features.dynamic_feature_adx(history, window=14),
-    #
-    # # New Features
-    # lambda history: dynamic_features.dynamic_feature_ema(history, window=20),
-    # lambda history: dynamic_features.dynamic_feature_ema(history, window=50),
-    # lambda history: dynamic_features.dynamic_feature_ema(history, window=100),
-    # lambda history: dynamic_features.dynamic_feature_ema(history, window=200),
-    #
-    # lambda history: dynamic_features.dynamic_feature_roc(history, window=10),
-    # lambda history: dynamic_features.dynamic_feature_roc(history, window=20),
-    # lambda history: dynamic_features.dynamic_feature_roc(history, window=50),
-    #
-    # lambda history: dynamic_features.dynamic_feature_price_diff(history, window=1),
-    # lambda history: dynamic_features.dynamic_feature_price_diff(history, window=5),
-    # lambda history: dynamic_features.dynamic_feature_price_diff(history, window=10),
-    #
-    # lambda history: dynamic_features.dynamic_feature_daily_return(history),
-    # lambda history: dynamic_features.dynamic_feature_high_low_range(history),
-    #
-    # lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=20),
-    # lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=50),
-    #
-    # lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=20, num_std=2),
-    #
-    # lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=14),
-    #
-    # lambda history: dynamic_features.dynamic_feature_atr(history, window=14),
-    #
-    # lambda history: dynamic_features.dynamic_feature_momentum(history, window=10),
-    # lambda history: dynamic_features.dynamic_feature_momentum(history, window=20),
-    #
-    # lambda history: dynamic_features.dynamic_feature_skewness(history, window=30),
-    # lambda history: dynamic_features.dynamic_feature_kurtosis(history, window=30),
-    #
-    # lambda history: dynamic_features.dynamic_feature_zscore(history, window=20),
-    #
-    # lambda history: dynamic_features.dynamic_feature_mfi(history, window=14),
+    # lambda history: get_discrete_value(dynamic_features.dynamic_feature_bollinger_bands(history, window=7)[2],
+    #                                     bins=[-1, 0, 1]),
+
 ]
+
