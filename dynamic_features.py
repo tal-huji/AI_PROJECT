@@ -1,4 +1,6 @@
 import numpy as np
+from matplotlib.style.core import available
+
 
 # def dynamic_feature_last_position_taken(history):
 #     return history['position', -1]
@@ -30,11 +32,17 @@ def dynamic_feature_adjusted_close_ema_ratio(history, window):
 #
 # Dynamic Feature: RSI
 def dynamic_feature_rsi(history, window=14):
-    if len(history) < window + 1:
+    if len(history) == 0:
         return 0.0
 
+    # Ensure we have at least two data points to compute differences
+    available_window = min(window, len(history) - 1)
+
+    if available_window < 1:
+        return 0.0  # Not enough data for RSI calculation
+
     # Calculate the price differences
-    delta = np.diff(history["data_close", -window - 1:])
+    delta = np.diff(history["data_close", -available_window - 1:])
 
     # If delta is empty, return 0.0 to avoid runtime warnings
     if delta.size == 0:
@@ -324,11 +332,12 @@ def dynamic_feature_price_change(history, window=1):
     :param window: Time window to compare the price change (default is 1, comparing the last price with the previous price)
     :return: 1 if sharp rise, 0 otherwise
     """
-    if len(history) < window + 1:
-        return 0.0  # Not enough data to compute sharp rise
+    if len(history) == 0:
+        return 0.0
+    available_window = min(window, len(history) - 1)
 
     # Calculate percentage price change
-    price_change = (history["data_close", -1] - history["data_close", -window - 1]) / history["data_close", -window - 1]
+    price_change = (history["data_close", -1] - history["data_close", -available_window - 1]) / history["data_close", -available_window - 1]
 
     return price_change
 

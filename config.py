@@ -4,7 +4,7 @@ import numpy as np
 
 hyperparams = {
     # General parameters
-    'start_train': '2020-01-01',
+    'start_train': '2023-01-01',
     'end_train': '2024-01-01',
     'start_test': '2024-01-01',
     'end_test':  '2024-02-01',
@@ -39,17 +39,18 @@ def get_discrete_value(value, bins):
     return np.digitize(value, bins)
 
 dynamic_features_arr = [
-    lambda history:get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=3),
-                                      bins=np.linspace(-0.01, 0.01, hyperparams['num_bins'])),
+    lambda history: get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=5),
+                                       bins=[-0.1, -0.05, 0, 0.05, 0.1]),
 
-    lambda history:get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=7),
-                                      bins=np.linspace(-0.05, 0.05, hyperparams['num_bins'])),
+    lambda history: get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=10),
+                                       bins=[-0.1, -0.05, 0, 0.05, 0.1]),
 
-    lambda history:get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=14),
-                                      bins=np.linspace(-0.1, 0.1, hyperparams['num_bins'])),
+    lambda history: get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=14),
+                                        bins=[-0.1, -0.05, 0, 0.05, 0.1]),
 
-    lambda history:get_discrete_value(dynamic_features.dynamic_feature_rsi(history, window=14),
-                                      bins=[0, 30, 70, 100]),
+    # lambda history: get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=14),
+    #                                     bins=[-0.06, 0.06]),
+
 
     # lambda history: get_discrete_value(dynamic_features.dynamic_feature_bollinger_bands(history, window=7)[0],
     #                                    bins=[-1, 0, 1]),

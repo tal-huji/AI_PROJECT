@@ -11,6 +11,9 @@ import numpy as np
 
 
 
+import numpy as np
+import matplotlib.pyplot as plt
+
 def split_data_by_month(df):
     """
     Splits the dataframe into separate dataframes by year and month.
@@ -23,6 +26,22 @@ def split_data_by_month(df):
     return monthly_data
 
 
+def weighted_ensemble_q_values(agents, state):
+    """
+    Calculate a weighted average of Q-values based on each agent's training_reward_last_episode.
+    Agents with better rewards in their last training episode have more influence.
+    """
+    q_values_list = [agent.get_q_values(state) for agent in agents]
+    rewards_last_episode = [agent.training_reward_last_episode for agent in agents]
+
+    # Normalize rewards to create performance weights
+    performance_weights = np.array(rewards_last_episode) / np.sum(rewards_last_episode)
+
+    # Weighted average of Q-values
+    weighted_q_values = np.average(q_values_list, axis=0, weights=performance_weights)
+    return weighted_q_values
+
+
 def main(agent_type='q-learning'):
     print(f"Running {agent_type.upper()} agent with multiple stocks and ensemble testing...")
     set_all_seeds(hyperparams['seed'])
@@ -32,22 +51,11 @@ def main(agent_type='q-learning'):
         'NVDA',
         'GOOGL',
         'AMD',
-        'NFLX',
-        'INTC',
-        'ORCL',
-        'ADBE',
-        'PYPL',
-        'CRM',
-        'UBER',
-        'LYFT',
-        'SNAP',
-        'AAPL',
-        'AMZN',
-        'MSFT',
         'TSLA',
-        'QCOM',
-        'CSCO',
-        'IBM',
+        'AAPL',
+        'MSFT',
+        'AMZN',
+        'INTC',
     ]
 
     # Store all agents across all stocks
@@ -66,48 +74,54 @@ def main(agent_type='q-learning'):
         df_train = fetch_data(ticker, start_train, end_train)
         df_test = fetch_data(ticker, start_test, end_test)
 
-        # Split training data by month
+        # Split training data by month for original data
         monthly_train_data = split_data_by_month(df_train)
 
         # Store agents trained for this stock
         stock_agents = []
 
-        # Train an agent for each month
-        for month, df_train_month in monthly_train_data.items():
-            if len(df_train_month) == 0:
-                continue  # Skip months with no data
+        # Function to train agent on a given set of monthly data
+        def train_agents_on_data(monthly_data):
+            for month, df_train_month in monthly_data.items():
+                if len(df_train_month) == 0:
+                    continue  # Skip months with no data
 
-            print(f"Training agent for {ticker}, month {month}...")
+                print(f"Training agent for {ticker}, month {month}...")
 
-            # Create environment for this month
-            env_train = create_trading_env(df_train_month, dynamic_features_arr)
+                # Create environment for this month
+                env_train = create_trading_env(df_train_month, dynamic_features_arr)
 
-            state_shape = env_train.observation_space.shape
-            action_size = env_train.action_space.n
+                state_shape = env_train.observation_space.shape
+                action_size = env_train.action_space.n
 
-            # Initialize agent
-            if agent_type == 'q-learning':
-                #min_max_dict = compute_min_max_for_features(df_train_month, dynamic_features_arr)
-                agent = QLearningAgent(env_train, None, action_size)#, min_max_dict)
-            elif agent_type == 'dqn':
-                agent = DQNAgent(state_shape, action_size)
-            else:
-                raise ValueError(f'Invalid agent type: {agent_type}')
+                # Initialize agent
+                if agent_type == 'q-learning':
+                    agent = QLearningAgent(env_train, None, action_size)
+                elif agent_type == 'dqn':
+                    agent = DQNAgent(state_shape, action_size)
+                else:
+                    raise ValueError(f'Invalid agent type: {agent_type}')
 
-            # Train agent
-            train_portfolio_values, train_actions = agent.train_agent()
+                # Train agent
+                train_portfolio_values, train_actions = agent.train_agent()
 
-            train_market_value = df_train_month['close'] * (10000 / df_train_month['close'].iloc[0])
+                # Save the last training reward for this agent
+                agent.training_reward_last_episode = np.sum(train_portfolio_values)  # Example metric
 
-            # Plot results
-            plot_performance(train_portfolio_values, None, train_market_value, None,
-                             df_train_month, None, algorithm_name=agent_type.upper(),
-                             n_dynamic_features=len(dynamic_features_arr), ticker=ticker,
-                             start_train=start_train, end_train=end_train, start_test=start_test, end_test=end_test,
-                             train_positions=train_actions)
+                train_market_value = df_train_month['close'] * (10000 / df_train_month['close'].iloc[0])
 
-            # Store the trained agent
-            stock_agents.append(agent)
+                # Plot results
+                plot_performance(train_portfolio_values, None, train_market_value, None,
+                                 df_train_month, None, algorithm_name=agent_type.upper(),
+                                 n_dynamic_features=len(dynamic_features_arr), ticker=ticker,
+                                 start_train=start_train, end_train=end_train, start_test=start_test, end_test=end_test,
+                                 train_positions=train_actions)
+
+                # Store the trained agent
+                stock_agents.append(agent)
+
+        # Train on original data
+        train_agents_on_data(monthly_train_data)
 
         # Add all agents trained for this stock to the global agent pool
         all_agents.extend(stock_agents)
@@ -128,7 +142,6 @@ def main(agent_type='q-learning'):
         # Test the ensemble of agents from all stocks on this stock's test data
         test_portfolio_values, ensemble_rewards, test_actions, final_portfolio_return, final_market_return = (
             ensemble_test(all_agents, env_test, agent_type))
-
 
         final_portfolio_returns.append(final_portfolio_return)
         final_market_returns.append(final_market_return)
@@ -153,8 +166,72 @@ def main(agent_type='q-learning'):
             end_test=end_test,
             test_positions=test_actions
         )
+
     # Plot bar chart of final portfolio returns compared to market returns
     plot_final_returns(final_portfolio_returns, final_market_returns, tickers, agent_type)
+
+
+def ensemble_test(agents, env_test, agent_type):
+    """
+    Test the ensemble of agents by interacting with the test environment.
+    Applies weighted voting using agents' training_reward_last_episode to avoid bias towards the "buy" action.
+    """
+    portfolio_values = []
+    actions = []
+
+    # Initialize the environment and get the initial state
+    state, _ = env_test.reset(seed=42)
+
+    total_reward = 0
+    done = False
+    initial_portfolio_value = None
+    initial_market_value = None  # Store the initial market value (closing price)
+    final_market_value = None    # Store the final market value (closing price)
+
+    while not done:
+        # Calculate weighted Q-values based on training reward performance
+        weighted_q_values = weighted_ensemble_q_values(agents, state)
+
+        # Choose action based on the highest weighted Q-value
+        action = np.argmax(weighted_q_values)
+
+        # Take step in environment
+        next_state, reward, terminated, truncated, info = env_test.step(action)
+        done = terminated or truncated
+
+        current_open_price = info['data_open']  # Get the current day's open price
+        current_close_price = info['data_close']  # Get the current day's close price
+
+        # Update portfolio value based on the current day's open price
+        portfolio_value = info['portfolio_valuation'] * current_open_price / current_close_price
+
+        # Store the initial portfolio value and market value
+        if initial_portfolio_value is None:
+            initial_portfolio_value = portfolio_value
+            initial_market_value = current_close_price
+
+        # Track the final market value (from the last step)
+        final_market_value = current_close_price
+
+        # Update state and tracking variables
+        state = next_state
+        total_reward += reward
+        portfolio_values.append(portfolio_value)
+        actions.append(hyperparams['positions'][action])
+
+    # Calculate total portfolio return
+    final_portfolio_value = portfolio_values[-1]
+    final_portfolio_return = (final_portfolio_value - initial_portfolio_value) / initial_portfolio_value * 100
+
+    # Calculate market return based on the price change
+    final_market_return = (final_market_value - initial_market_value) / initial_market_value * 100
+
+    print(f"Ensemble Test Total Reward: {total_reward}")
+    print(f"Portfolio Return: {final_portfolio_return:.2f}%")
+    print(f"Market Return: {final_market_return:.2f}%")
+
+    return portfolio_values, total_reward, actions, final_portfolio_return, final_market_return
+
 
 def plot_final_returns(final_portfolio_returns, final_market_returns, tickers, agent_type):
     """
@@ -200,73 +277,9 @@ def plot_final_returns(final_portfolio_returns, final_market_returns, tickers, a
     plt.show()
 
 
-def ensemble_test(agents, env_test, agent_type):
-    """
-    Test the ensemble of Q-learning agents by interacting with the test environment.
-    """
-    portfolio_values = []
-    actions = []
-
-    # Initialize the environment and get the initial state
-    state, _ = env_test.reset(seed=42)
-
-    total_reward = 0
-    done = False
-    initial_portfolio_value = None
-    initial_market_value = None  # Store the initial market value (closing price)
-    final_market_value = None    # Store the final market value (closing price)
-
-    while not done:
-        # Get Q-values from all agents
-        q_values_list = [agent.get_q_values(state) for agent in agents]
-
-        # Average Q-values across all agents
-        average_q_values = np.mean(q_values_list, axis=0)
-
-        # Choose action based on the highest average Q-value
-        action = np.argmax(average_q_values)
-
-        # Take step in environment
-        next_state, reward, terminated, truncated, info = env_test.step(action)
-        done = terminated or truncated
-
-        current_open_price = info['data_open']  # Get the current day's open price
-        current_close_price = info['data_close']  # Get the current day's close price
-
-        # Update portfolio value based on the current day's open price
-        portfolio_value = info['portfolio_valuation'] * current_open_price / current_close_price
-
-        # Store the initial portfolio value and market value
-        if initial_portfolio_value is None:
-            initial_portfolio_value = portfolio_value
-            initial_market_value = current_close_price
-
-        # Track the final market value (from the last step)
-        final_market_value = current_close_price
-
-        # Update state and tracking variables
-        state = next_state
-        total_reward += reward
-        portfolio_values.append(portfolio_value)
-        actions.append(hyperparams['positions'][action])
-
-    # Calculate total portfolio return
-    final_portfolio_value = portfolio_values[-1]
-    final_portfolio_return = (final_portfolio_value - initial_portfolio_value) / initial_portfolio_value * 100
-
-    # Calculate market return based on the price change
-    final_market_return = (final_market_value - initial_market_value) / initial_market_value * 100
-
-    print(f"Ensemble Test Total Reward: {total_reward}")
-    print(f"Portfolio Return: {final_portfolio_return:.2f}%")
-    print(f"Market Return: {final_market_return:.2f}%")
-
-    return portfolio_values, total_reward, actions, final_portfolio_return, final_market_return
-
-
-
 # Example usage
 main(agent_type='q-learning')
+
 
 
 
