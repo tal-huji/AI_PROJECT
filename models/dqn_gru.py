@@ -1,4 +1,3 @@
-# models/dqn.py
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,36 +10,18 @@ from online_normalization import OnlineNormalization
 from utils import set_all_seeds
 
 
-# DQN model with Layer Normalization (for small batches)
-# class DQN(nn.Module):
-#     def __init__(self, state_dim, action_dim, hidden_size):
-#         super(DQN, self).__init__()
-#         self.fc1 = nn.Linear(state_dim, hidden_size)
-#         self.ln1 = nn.LayerNorm(hidden_size)  # Layer Norm instead of Batch Norm
-#         self.fc2 = nn.Linear(hidden_size, hidden_size)
-#         self.ln2 = nn.LayerNorm(hidden_size)  # Layer Norm instead of Batch Norm
-#         self.fc3 = nn.Linear(hidden_size, action_dim)
-#         self.init_weights()
-#
-#     def init_weights(self):
-#         for module in self.modules():
-#             if isinstance(module, nn.Linear):
-#                 torch.nn.init.xavier_uniform_(module.weight)
-#                 torch.nn.init.zeros_(module.bias)
-#
-#     def forward(self, x):
-#         x = torch.relu(self.ln1(self.fc1(x)))  # LayerNorm after first linear layer
-#         x = torch.relu(self.ln2(self.fc2(x)))  # LayerNorm after second linear layer
-#         return self.fc3(x)  # No LayerNorm after output layer
+# GRU-based DQN model
+class DQN_GRU(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(DQN_GRU, self).__init__()
 
+        hidden_size = hyperparams['hidden_layer_size']
+        gru_hidden_size = hyperparams['lstm_hidden_size']  # Reusing the same hyperparameter for GRU
+        num_layers = hyperparams['lstm_num_layers']
 
-# DQN model without normalization
-class DQN(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_size):
-        super(DQN, self).__init__()
-        self.fc1 = nn.Linear(state_dim, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, action_dim)
+        self.fc1 = nn.Linear(state_dim, hidden_size)  # Initial fully connected layer
+        self.gru = nn.GRU(hidden_size, gru_hidden_size, num_layers, batch_first=True)  # GRU layer
+        self.fc2 = nn.Linear(gru_hidden_size, action_dim)  # Output layer for action values
         self.init_weights()
 
     def init_weights(self):
@@ -49,14 +30,21 @@ class DQN(nn.Module):
                 torch.nn.init.xavier_uniform_(module.weight)
                 torch.nn.init.zeros_(module.bias)
 
-    def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        return self.fc3(x)
+    def forward(self, x, hidden_state=None):
+        x = torch.relu(self.fc1(x))  # Pass through the first FC layer
+        x = x.unsqueeze(1)  # Add a sequence dimension for the GRU
+
+        if hidden_state is None:
+            gru_out, hidden_state = self.gru(x)
+        else:
+            gru_out, hidden_state = self.gru(x, hidden_state)
+
+        gru_out = gru_out[:, -1, :]  # Take the output from the last time step
+        return self.fc2(gru_out), hidden_state  # Output the Q-values and the hidden state
 
 
-# DQN Agent
-class DQNAgent(Agent):
+# DQN Agent with GRU
+class DQNAgent_GRU(Agent):
     def __init__(self, train_env, state_shape, action_size):
         self.state_shape = state_shape
         self.action_size = action_size
@@ -67,31 +55,31 @@ class DQNAgent(Agent):
         self.exploration_decay = hyperparams['exploration_decay']
 
         state_dim = np.prod(state_shape)
-        self.model = DQN(state_dim, action_size, hyperparams['hidden_layer_size']).to(device)
-        self.target_model = DQN(state_dim, action_size, hyperparams['hidden_layer_size']).to(device)
+
+        self.model = DQN_GRU(state_dim, action_size).to(device)
+        self.target_model = DQN_GRU(state_dim, action_size).to(device)
         self.target_model.load_state_dict(self.model.state_dict())
         self.target_model.eval()
+
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.memory = []
-
         self.train_env = train_env
-        # self.test_env = test_env
 
         # Initialize OnlineNormalization for normalizing states
         self.normalizer = OnlineNormalization(state_dim)
 
-    def choose_action(self, state):
+    def choose_action(self, state, hidden_state=None):
         # Update and normalize the state before feeding into the model
         self.normalizer.update(state)
         normalized_state = self.normalizer.normalize(state)
 
         if np.random.rand() <= self.exploration_rate:
-            return np.random.randint(self.action_size)
+            return np.random.randint(self.action_size), hidden_state
 
         state_tensor = torch.FloatTensor(normalized_state).unsqueeze(0).to(device)
         with torch.no_grad():
-            q_values = self.model(state_tensor)
-        return q_values.max(1)[1].item()
+            q_values, hidden_state = self.model(state_tensor, hidden_state)
+        return q_values.max(1)[1].item(), hidden_state
 
     def remember(self, state, action, reward, next_state, done):
         # Update and normalize both state and next_state before storing
@@ -122,8 +110,13 @@ class DQNAgent(Agent):
         next_states = torch.FloatTensor(next_states).to(device)
         dones = torch.FloatTensor(dones).to(device)
 
-        current_q_values = self.model(states).gather(1, actions.unsqueeze(1)).squeeze(1)
-        next_q_values = self.target_model(next_states).max(1)[0]
+        hidden_state = None  # For simplicity, we don't store hidden states in the replay buffer
+        current_q_values, _ = self.model(states, hidden_state)
+        current_q_values = current_q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+
+        next_q_values, _ = self.target_model(next_states, hidden_state)
+        next_q_values = next_q_values.max(1)[0]
+
         target_q_values = rewards + (1 - dones) * self.discount_factor * next_q_values
 
         loss = nn.MSELoss()(current_q_values, target_q_values)
@@ -136,8 +129,6 @@ class DQNAgent(Agent):
     def update_target_model(self):
         self.target_model.load_state_dict(self.model.state_dict())
 
-    # Train agent
-    # Train agent
     def train_agent(self):
         super().train_agent()
 
@@ -153,8 +144,10 @@ class DQNAgent(Agent):
             episode_portfolio_values = []  # Track portfolio values for this episode
             episode_actions = []  # Track actions taken in this episode
 
+            hidden_state = None  # Initialize hidden state for the GRU
+
             while not done:
-                action = self.choose_action(state)
+                action, hidden_state = self.choose_action(state, hidden_state)
                 next_state, reward, terminated, truncated, info = self.train_env.step(action)
                 done = terminated or truncated
                 next_state = next_state.flatten()
@@ -179,23 +172,14 @@ class DQNAgent(Agent):
 
         return last_episode_portfolio_values, last_episode_actions  # Return values and actions from the last episode
 
-    # Test agent
     def test_agent(self):
         pass
 
-    def get_q_values(self, state):
-        """
-        Return Q-values for all actions based on the given state.
-        """
+    def get_q_values(self, state, hidden_state=None):
         self.normalizer.update(state)
         normalized_state = self.normalizer.normalize(state)
-
-        # Convert the state to a tensor and move to the appropriate device (CPU/GPU)
         state_tensor = torch.FloatTensor(normalized_state).unsqueeze(0).to(device)
 
-        # Ensure no gradients are calculated during inference
         with torch.no_grad():
-            q_values = self.model(state_tensor)
-
-        # Return the Q-values as a numpy array
-        return q_values.cpu().numpy().flatten()
+            q_values, hidden_state = self.model(state_tensor, hidden_state)
+        return q_values.cpu().numpy().flatten(), hidden_state

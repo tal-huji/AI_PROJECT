@@ -72,7 +72,8 @@ def plot_performance(train_performance=None, test_performance=None, train_market
         if train_positions is not None:
             plot_positions(ax1, train_dates, np.array(train_positions), np.array(train_performance))
 
-        ax1.set_title(f'Training Performance on {ticker}')
+
+        ax1.set_title(get_title('Training', algorithm_name, ticker))
         ax1.set_xlabel('Date')
         ax1.set_ylabel('Portfolio Value')
         ax1.legend()
@@ -82,20 +83,57 @@ def plot_performance(train_performance=None, test_performance=None, train_market
 
     # Plot Testing performance if testing data is provided
     if test_performance is not None and df_test is not None:
+        # Check that the test data lengths are aligned
+        test_performance_len = len(test_performance)
+        test_dates_len = len(df_test.index)
+        test_market_values_len = len(test_market_values)
+
+        # Take the minimum of the lengths to avoid mismatch
+        min_test_len = min(test_performance_len, test_dates_len, test_market_values_len)
+
+        # Only use the matching length for dates, performance, and market values
+        test_dates = df_test.index[-min_test_len:]
+        test_performance = test_performance[-min_test_len:]
+        test_market_values = test_market_values[-min_test_len:]
+
         fig, ax2 = plt.subplots(figsize=(12, 6))
 
-        test_dates = df_test.index[-len(test_performance):]
         ax2.plot(test_dates, test_performance, label=f'{algorithm_name} Portfolio Value')
-        ax2.plot(test_dates, test_market_values[-len(test_performance):], label='Market Value', color='green')
+        ax2.plot(test_dates, test_market_values, label='Market Value', color='green')
 
         # Plot positions (actions taken by the agent) above the lines
         if test_positions is not None:
-            plot_positions(ax2, test_dates, np.array(test_positions), np.array(test_performance))
+            test_positions = np.array(test_positions[-min_test_len:])  # Ensure positions match the test length
+            plot_positions(ax2, test_dates, test_positions, np.array(test_performance))
 
-        ax2.set_title(f'Testing Performance on {ticker}')
+
+
+        ax2.set_title(get_title('Testing', algorithm_name, ticker))
         ax2.set_xlabel('Date')
         ax2.set_ylabel('Portfolio Value')
         ax2.legend()
 
         plt.tight_layout()
         plt.show()
+
+
+def get_title(mode, algorithm_name, ticker):
+
+    n_episodes = hyperparams['n_episodes']
+    learning_rate = hyperparams['learning_rate']
+    positions = hyperparams['positions']  # The list of possible actions (positions)
+    start_date = hyperparams['start_date']
+    end_date = hyperparams['end_date']
+
+    title = f'{mode} Performance on {ticker} from {start_date} to {end_date}'
+    title += f'\n{algorithm_name} with {n_episodes} episodes, learning rate {learning_rate}'
+    title += f'\nPositions: {positions}'
+
+    if 'dqn' in algorithm_name.lower():
+        title += f' | Hidden layers: {hyperparams["hidden_layer_size"]}'
+
+    if algorithm_name.lower() == 'dqn_lstm' or algorithm_name.lower() == 'dqn_gru':
+        title += f'\nLSTM with {hyperparams["lstm_num_layers"]} layers, hidden size {hyperparams["lstm_hidden_size"]}'
+
+
+    return title
