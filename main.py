@@ -15,7 +15,7 @@ import pandas as pd
 
 import mplfinance as mpf
 
-def main(agent_type='q-learning', train_interval_days=10, test_interval_days=10):
+def main(agent_type, train_interval_days, test_interval_days):
     print(f"Running {agent_type.upper()} agent for training and testing each stock...")
 
     set_all_seeds(hyperparams['seed'])
@@ -278,4 +278,8 @@ def plot_final_results(results):
 
 
 # Example usage
-main(agent_type='q-learning', train_interval_days=10, test_interval_days=10)  # Adjusted for dynamic interval
+main(
+    agent_type=hyperparams['algorithm'],
+    train_interval_days=hyperparams['train_interval_days'],
+    test_interval_days=hyperparams['test_interval_days']
+)  # Adjusted for dynamic interval
