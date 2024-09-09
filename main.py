@@ -4,7 +4,7 @@ from device import device
 from env_utils import create_trading_env
 from models.dqn_gru import DQN_GRU, DQNAgent_GRU  # GRU-based model
 from models.dqn_lstm import DQNAgent_LSTM
-from models.ql import QLearningAgent
+from models.ql import QLearningAgent, get_hashasble_state
 from utils import fetch_data, plot_performance, set_all_seeds
 from models.dqn import DQNAgent
 from config import hyperparams
@@ -168,8 +168,9 @@ def test_agent(agent, env_test, agent_type):
                 else:
                     q_values, _ = agent.model(state_tensor)
                     q_values = q_values.detach().cpu().numpy()[0]
-        else:
-            q_values = agent.q_table[state]
+        elif agent_type == 'q-learning':
+            hashable = get_hashasble_state(state)
+            q_values = agent.q_table[hashable]
 
         action = np.argmax(q_values)
 
@@ -277,4 +278,4 @@ def plot_final_results(results):
 
 
 # Example usage
-main(agent_type='dqn_gru', train_interval_days=10, test_interval_days=10)  # Adjusted for dynamic interval
+main(agent_type='q-learning', train_interval_days=10, test_interval_days=10)  # Adjusted for dynamic interval
