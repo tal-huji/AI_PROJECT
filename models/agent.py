@@ -14,8 +14,7 @@ class Agent(ABC):
 
     @abstractmethod
     def train_agent(self):
-        print(f"Start training with hyperparameters: {hyperparams}")
-        print(f"Number of dynamic features: {len(dynamic_features_arr)}")
+        pass
 
     @abstractmethod
     def test_agent(self):

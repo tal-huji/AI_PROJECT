@@ -111,7 +111,7 @@ def dynamic_feature_adx(history, window=14):
 # Dynamic Feature: EMA
 def dynamic_feature_ema(history, window):
     if len(history) == 0:
-        return 0.0
+        raise ValueError("Cannot calculate EMA with empty history")
     available_window = min(window, len(history) - 1)
     prices = history["data_close", -available_window:]
     alpha = 2 / (available_window + 1)
@@ -123,40 +123,40 @@ def dynamic_feature_ema(history, window):
 # Dynamic Feature: Price Rate of Change (ROC)
 def dynamic_feature_roc(history, window=10):
     if len(history) == 0:
-        return 0.0
+        raise ValueError("Cannot calculate ROC with empty history")
     available_window = min(window, len(history) - 1)
     return ((history["data_close", -1] - history["data_close", -available_window - 1]) / history["data_close", -available_window - 1]) * 100
 
 # Dynamic Feature: Price Difference
 def dynamic_feature_price_diff(history, window=1):
     if len(history) == 0:
-        return 0.0
+        raise ValueError("Cannot calculate price difference with empty history")
     available_window = min(window, len(history) - 1)
     return history["data_close", -1] - history["data_close", -available_window - 1]
 
 # Dynamic Feature: Daily Return
 def dynamic_feature_daily_return(history):
     if len(history) <= 1:
-        return 0.0
+        raise ValueError("Cannot calculate daily return with less than two data points")
     return (history["data_close", -1] / history["data_close", -2]) - 1
 
 # Dynamic Feature: High-Low Range
 def dynamic_feature_high_low_range(history):
     if len(history) == 0:
-        return 0.0
+         raise ValueError("Cannot calculate high-low range with empty history")
     return history["data_high", -1] - history["data_low", -1]
 #
 # Dynamic Feature: Volume Moving Average
 def dynamic_feature_volume_ma(history, window=20):
     if len(history) == 0:
-        return 0.0
+         raise ValueError("Cannot calculate volume moving average with empty history")
     available_window = min(window, len(history) - 1)
     return history["data_volume", -available_window:].mean()
 
 # Dynamic Feature: Bollinger Band Width
 def dynamic_feature_bollinger_band_width(history, window=20, num_std=2):
     if len(history) == 0:
-        return 0.0
+        raise ValueError("Cannot calculate Bollinger Band Width with empty history")
     available_window = min(window, len(history) - 1)
     sma = history["data_close", -available_window:].mean()
     std = history["data_close", -available_window:].std()
@@ -167,7 +167,7 @@ def dynamic_feature_bollinger_band_width(history, window=20, num_std=2):
 # # Dynamic Feature: Stochastic Oscillator
 def dynamic_feature_stochastic_oscillator(history, window=14):
     if len(history) == 0:
-        return 0.0
+        raise ValueError("Cannot calculate Stochastic Oscillator with empty history")
     available_window = min(window, len(history) - 1)
     highest_high = np.max(history["data_high", -available_window:])
     lowest_low = np.min(history["data_low", -available_window:])
@@ -177,7 +177,7 @@ def dynamic_feature_stochastic_oscillator(history, window=14):
 
 def dynamic_feature_atr(history, window=14):
     if len(history) == 0:
-        return 0.0
+        raise ValueError("Cannot calculate ATR with empty history")
 
     available_window = min(window, len(history) - 1)
 
@@ -205,178 +205,9 @@ def dynamic_feature_atr(history, window=14):
 # Dynamic Feature: Momentum
 def dynamic_feature_momentum(history, window=10):
     if len(history) == 0:
-        return 0.0
+        raise ValueError("Cannot calculate momentum with empty history")
     available_window = min(window, len(history) - 1)
     return history["data_close", -1] - history["data_close", -available_window - 1]
-
-# Dynamic Feature: Skewness
-def dynamic_feature_skewness(history, window=30):
-    if len(history) == 0:
-        return 0.0
-
-    available_window = min(window, len(history) - 1)
-    close_prices = history["data_close", -available_window:]
-
-    # Ensure that we have valid data in the window
-    if len(close_prices) == 0:
-        return 0.0
-
-    mean_close = np.mean(close_prices)
-    std_close = np.std(close_prices)
-
-    # Check if the standard deviation is zero to prevent division by zero
-    if std_close == 0:
-        return 0.0
-
-    # Calculate skewness
-    skewness = np.mean((close_prices - mean_close) ** 3) / (std_close ** 3)
-
-    # Handle potential NaN values in the skewness calculation
-    return skewness if not np.isnan(skewness) and not np.isinf(skewness) else 0.0
-# Dynamic Feature: Kurtosis
-def dynamic_feature_kurtosis(history, window=30):
-    if len(history) == 0:
-        return 0.0
-
-    available_window = min(window, len(history) - 1)
-    close_prices = history["data_close", -available_window:]
-
-    # Ensure that we have valid data in the window
-    if len(close_prices) == 0:
-        return 0.0
-
-    mean_close = np.mean(close_prices)
-    std_close = np.std(close_prices)
-
-    # Check if the standard deviation is zero to prevent division by zero
-    if std_close == 0:
-        return 0.0
-
-    # Calculate kurtosis
-    kurtosis = np.mean((close_prices - mean_close) ** 4) / (std_close ** 4)
-
-    # Handle potential NaN values in the kurtosis calculation
-    return kurtosis if not np.isnan(kurtosis) and not np.isinf(kurtosis) else 0.0
-# Dynamic Feature: Z-score of Close Price
-def dynamic_feature_zscore(history, window=20):
-    if len(history) == 0:
-        return 0.0
-    available_window = min(window, len(history) - 1)
-    prices = history["data_close", -available_window:]
-    mean = prices.mean()
-    std = prices.std()
-    return (history["data_close", -1] - mean) / std if std != 0 else 0.0
-
-# Dynamic Feature: Money Flow Index (MFI)
-def dynamic_feature_mfi(history, window=14):
-    if len(history) == 0:
-        return 0.0
-    available_window = min(window, len(history) - 1)
-    typical_price = (history["data_high", -available_window:] + history["data_low", -available_window:] + history["data_close", -available_window:]) / 3
-    money_flow = typical_price * history["data_volume", -available_window:]
-    positive_flow = np.sum(money_flow[1:][money_flow[1:] > money_flow[:-1]])
-    negative_flow = np.sum(money_flow[1:][money_flow[1:] < money_flow[:-1]])
-    money_flow_ratio = positive_flow / negative_flow if negative_flow != 0 else 0
-    return 100 - (100 / (1 + money_flow_ratio))
-
-
-def dynamic_feature_vwap(history):
-    if len(history) == 0:
-        return 0.0
-    return np.sum(history["data_volume", -1] * history["data_close", -1]) / np.sum(history["data_volume", -1])
-
-def dynamic_feature_price_state(history):
-    if len(history) < 2:
-        return 0.0  # Not enough data to determine state
-    return 1 if history["data_close", -1] >= history["data_close", -2] else -1
-
-
-def dynamic_feature_transitional_probability(history):
-    if len(history) < 2:
-        return 0.0  # Not enough data to compute probabilities
-    rise = history["data_close", -1] > history["data_close", -2]
-    buy = history["position", -1] == 1
-    return 1 if rise and buy else 0  # Returns 1 if both rise and buy, otherwise 0
-
-
-def dynamic_feature_sharpe_ratio(history, risk_free_rate=0.0, window=14):
-    if len(history) < 2:
-        return 0.0
-    available_window = min(window, len(history) - 1)
-
-    # Calculate returns
-    returns = np.diff(history["data_close", -available_window:]) / history["data_close", -available_window:-1]
-
-    # Check if there are enough returns to compute mean and std
-    if len(returns) < 2:
-        return 0.0  # Not enough data to calculate Sharpe ratio
-
-    excess_returns = returns - risk_free_rate
-
-    # Safeguard against std being 0
-    std_excess_returns = excess_returns.std()
-
-    return excess_returns.mean() / std_excess_returns if std_excess_returns != 0 else 0.0
-
-def dynamic_feature_williams_r(history, window=14):
-    if len(history) == 0:
-        return 0.0
-    available_window = min(window, len(history) - 1)
-    highest_high = np.max(history["data_high", -available_window:])
-    lowest_low = np.min(history["data_low", -available_window:])
-    current_close = history["data_close", -1]
-    return ((highest_high - current_close) / (highest_high - lowest_low)) * -100 if highest_high != lowest_low else 0.0
-
-
-def dynamic_feature_derivative_sharpe_ratio(history, risk_free_rate=0.0, window=14):
-    # Ensure there are enough data points in history
-    if len(history) < 2:
-        return 0.0
-
-    # Calculate the available window size
-    available_window = min(window, len(history) - 1)
-
-    # Calculate returns
-    returns = np.diff(history["data_close", -available_window:]) / history["data_close", -available_window:-1]
-
-    # Check if there are enough returns to compute Sharpe ratio
-    if len(returns) < 2:
-        return 0.0
-
-    excess_returns = returns - risk_free_rate
-
-    # Calculate current Sharpe ratio, with safeguard against division by zero
-    std_excess_returns = excess_returns.std()
-    if std_excess_returns == 0:
-        return 0.0
-
-    current_sharpe_ratio = excess_returns.mean() / std_excess_returns
-
-    # Calculate previous Sharpe ratio (one step back), with safeguard against insufficient data
-    if len(history) < available_window + 2:
-        return 0.0  # Not enough history to compute previous Sharpe ratio
-
-    previous_returns = np.diff(history["data_close", -(available_window + 1):-1]) / history["data_close", -(available_window + 1):-2]
-
-    if len(previous_returns) < 2:
-        return 0.0
-
-    previous_excess_returns = previous_returns - risk_free_rate
-    previous_std_excess_returns = previous_excess_returns.std()
-
-    if previous_std_excess_returns == 0:
-        return 0.0
-
-    previous_sharpe_ratio = previous_excess_returns.mean() / previous_std_excess_returns
-
-    # Return the derivative of the Sharpe ratio (difference between current and previous Sharpe ratios)
-    return current_sharpe_ratio - previous_sharpe_ratio
-
-def dynamic_feature_interval_profit(history, window=14):
-    if len(history) < 2:
-        return 0.0
-    available_window = min(window, len(history) - 1)
-    return history["data_close", -1] - history["data_close", -available_window]
 
 
 def dynamic_feature_price_change(history, window=1):
@@ -389,11 +220,184 @@ def dynamic_feature_price_change(history, window=1):
     :param window: Time window to compare the price change (default is 1, comparing the last price with the previous price)
     :return: 1 if sharp rise, 0 otherwise
     """
-    if len(history) < window + 1:
-        return 0.0
+    if len(history) == 0:
+        raise ValueError("Cannot calculate price change with empty history")
+
+    available_window = min(window, len(history) - 1)
 
     # Calculate percentage price change
-    price_change = (history["data_close", -1] - history["data_close", -window - 1]) / history["data_close", -window - 1]
+    price_change = (history["data_close", -1] - history["data_close", -available_window - 1]) / history[
+        "data_close", -available_window - 1]
 
     return price_change
+
+# Dynamic Feature: Skewness
+# def dynamic_feature_skewness(history, window=30):
+#     if len(history) == 0:
+#         return 0.0
+#
+#     available_window = min(window, len(history) - 1)
+#     close_prices = history["data_close", -available_window:]
+#
+#     # Ensure that we have valid data in the window
+#     if len(close_prices) == 0:
+#         return 0.0
+#
+#     mean_close = np.mean(close_prices)
+#     std_close = np.std(close_prices)
+#
+#     # Check if the standard deviation is zero to prevent division by zero
+#     if std_close == 0:
+#         return 0.0
+#
+#     # Calculate skewness
+#     skewness = np.mean((close_prices - mean_close) ** 3) / (std_close ** 3)
+#
+#     # Handle potential NaN values in the skewness calculation
+#     return skewness if not np.isnan(skewness) and not np.isinf(skewness) else 0.0
+# Dynamic Feature: Kurtosis
+# def dynamic_feature_kurtosis(history, window=30):
+#     if len(history) == 0:
+#         return 0.0
+#
+#     available_window = min(window, len(history) - 1)
+#     close_prices = history["data_close", -available_window:]
+#
+#     # Ensure that we have valid data in the window
+#     if len(close_prices) == 0:
+#         return 0.0
+#
+#     mean_close = np.mean(close_prices)
+#     std_close = np.std(close_prices)
+#
+#     # Check if the standard deviation is zero to prevent division by zero
+#     if std_close == 0:
+#         return 0.0
+#
+#     # Calculate kurtosis
+#     kurtosis = np.mean((close_prices - mean_close) ** 4) / (std_close ** 4)
+#
+#     # Handle potential NaN values in the kurtosis calculation
+#     return kurtosis if not np.isnan(kurtosis) and not np.isinf(kurtosis) else 0.0
+# Dynamic Feature: Z-score of Close Price
+# def dynamic_feature_zscore(history, window=20):
+#     if len(history) == 0:
+#         return 0.0
+#     available_window = min(window, len(history) - 1)
+#     prices = history["data_close", -available_window:]
+#     mean = prices.mean()
+#     std = prices.std()
+#     return (history["data_close", -1] - mean) / std if std != 0 else 0.0
+
+# Dynamic Feature: Money Flow Index (MFI)
+# def dynamic_feature_mfi(history, window=14):
+#     if len(history) == 0:
+#         return 0.0
+#     available_window = min(window, len(history) - 1)
+#     typical_price = (history["data_high", -available_window:] + history["data_low", -available_window:] + history["data_close", -available_window:]) / 3
+#     money_flow = typical_price * history["data_volume", -available_window:]
+#     positive_flow = np.sum(money_flow[1:][money_flow[1:] > money_flow[:-1]])
+#     negative_flow = np.sum(money_flow[1:][money_flow[1:] < money_flow[:-1]])
+#     money_flow_ratio = positive_flow / negative_flow if negative_flow != 0 else 0
+#     return 100 - (100 / (1 + money_flow_ratio))
+
+
+# def dynamic_feature_vwap(history):
+#     if len(history) == 0:
+#         return 0.0
+#     return np.sum(history["data_volume", -1] * history["data_close", -1]) / np.sum(history["data_volume", -1])
+#
+# def dynamic_feature_price_state(history):
+#     if len(history) < 2:
+#         return 0.0  # Not enough data to determine state
+#     return 1 if history["data_close", -1] >= history["data_close", -2] else -1
+#
+
+# def dynamic_feature_transitional_probability(history):
+#     if len(history) < 2:
+#         return 0.0  # Not enough data to compute probabilities
+#     rise = history["data_close", -1] > history["data_close", -2]
+#     buy = history["position", -1] == 1
+#     return 1 if rise and buy else 0  # Returns 1 if both rise and buy, otherwise 0
+#
+
+# def dynamic_feature_sharpe_ratio(history, risk_free_rate=0.0, window=14):
+#     if len(history) < 2:
+#         return 0.0
+#     available_window = min(window, len(history) - 1)
+#
+#     # Calculate returns
+#     returns = np.diff(history["data_close", -available_window:]) / history["data_close", -available_window:-1]
+#
+#     # Check if there are enough returns to compute mean and std
+#     if len(returns) < 2:
+#         return 0.0  # Not enough data to calculate Sharpe ratio
+#
+#     excess_returns = returns - risk_free_rate
+#
+#     # Safeguard against std being 0
+#     std_excess_returns = excess_returns.std()
+#
+#     return excess_returns.mean() / std_excess_returns if std_excess_returns != 0 else 0.0
+
+# def dynamic_feature_williams_r(history, window=14):
+#     if len(history) == 0:
+#         return 0.0
+#     available_window = min(window, len(history) - 1)
+#     highest_high = np.max(history["data_high", -available_window:])
+#     lowest_low = np.min(history["data_low", -available_window:])
+#     current_close = history["data_close", -1]
+#     return ((highest_high - current_close) / (highest_high - lowest_low)) * -100 if highest_high != lowest_low else 0.0
+#
+
+# def dynamic_feature_derivative_sharpe_ratio(history, risk_free_rate=0.0, window=14):
+#     # Ensure there are enough data points in history
+#     if len(history) < 2:
+#         return 0.0
+#
+#     # Calculate the available window size
+#     available_window = min(window, len(history) - 1)
+#
+#     # Calculate returns
+#     returns = np.diff(history["data_close", -available_window:]) / history["data_close", -available_window:-1]
+#
+#     # Check if there are enough returns to compute Sharpe ratio
+#     if len(returns) < 2:
+#         return 0.0
+#
+#     excess_returns = returns - risk_free_rate
+#
+#     # Calculate current Sharpe ratio, with safeguard against division by zero
+#     std_excess_returns = excess_returns.std()
+#     if std_excess_returns == 0:
+#         return 0.0
+#
+#     current_sharpe_ratio = excess_returns.mean() / std_excess_returns
+#
+#     # Calculate previous Sharpe ratio (one step back), with safeguard against insufficient data
+#     if len(history) < available_window + 2:
+#         return 0.0  # Not enough history to compute previous Sharpe ratio
+#
+#     previous_returns = np.diff(history["data_close", -(available_window + 1):-1]) / history["data_close", -(available_window + 1):-2]
+#
+#     if len(previous_returns) < 2:
+#         return 0.0
+#
+#     previous_excess_returns = previous_returns - risk_free_rate
+#     previous_std_excess_returns = previous_excess_returns.std()
+#
+#     if previous_std_excess_returns == 0:
+#         return 0.0
+#
+#     previous_sharpe_ratio = previous_excess_returns.mean() / previous_std_excess_returns
+#
+#     # Return the derivative of the Sharpe ratio (difference between current and previous Sharpe ratios)
+#     return current_sharpe_ratio - previous_sharpe_ratio
+
+# def dynamic_feature_interval_profit(history, window=14):
+#     if len(history) < 2:
+#         return 0.0
+#     available_window = min(window, len(history) - 1)
+#     return history["data_close", -1] - history["data_close", -available_window]
+
 
