@@ -8,8 +8,11 @@ INTERVAL_SIZE = 18
 hyperparams = {
     'algorithm': 'dqn_gru',  # q-learning, dqn, dqn_gru, dqn_lstm
     'interval_days': INTERVAL_SIZE,
-    'ppo_timestamps':1,
-    'show_buy_sell_signals': False,
+
+
+    'ppo_timestamps':50000,
+    'show_buy_sell_signals': True,
+    'ppo_start_train': '2020-01-01',
 
     'start_year': '2022-01-01',
     'end_year': None,
@@ -37,7 +40,7 @@ hyperparams = {
     # DQN-specific parameters
     'hidden_layer_size': 128,
     'lstm_hidden_size': 128,
-    'lstm_num_layers': 80,
+    'lstm_num_layers': 40,
     'memory_size': 1000,
     'batch_size': 16,
 }

@@ -346,8 +346,8 @@ def plot_yearly_performance(
         ax.plot(trading_dates, buy_signals, '^', markersize=2, color='green', label='Buy Signal', linestyle='None')
         ax.plot(trading_dates, sell_signals, 'o', markersize=2, color='black', label='Sell Signal', linestyle='None')
 
-        ax.plot(trading_dates, buy_signals_ppo, '^', markersize=2, color='green', label='Buy Signal PPO', linestyle='None')
-        ax.plot(trading_dates, sell_signals_ppo, 'o', markersize=2, color='black', label='Sell Signal PPO', linestyle='None')
+        #ax.plot(trading_dates, buy_signals_ppo, '^', markersize=2, color='green', label='Buy Signal PPO', linestyle='None')
+        #ax.plot(trading_dates, sell_signals_ppo, 'o', markersize=2, color='black', label='Sell Signal PPO', linestyle='None')
 
     # Set title and labels
     title = f'{ticker} - Yearly Performance - {hyperparams["algorithm"].upper()}'
@@ -433,13 +433,18 @@ def plot_final_results(results, results_ppo):
 
 def train_and_test_ppo(df_dates, ticker, interval_days, final_results, trading_dates):
     df_ppo_test = df_dates.iloc[interval_days:]
-    df_ppo_train = fetch_data(ticker, '2020-01-01', df_ppo_test.index[0]).sort_index()
+    df_ppo_train = fetch_data(ticker, hyperparams['ppo_start_train'], df_ppo_test.index[0]).sort_index()
 
     env_train_ppo = create_trading_env(df_ppo_train, dynamic_features_arr, hyperparams['portfolio_initial_value'])
     env_train_ppo = DummyVecEnv([lambda: env_train_ppo])
 
     # Initialize PPO agent
-    agent = PPO('MlpPolicy', env_train_ppo, verbose=1)
+    agent = PPO(
+        'MlpPolicy',
+        env_train_ppo,
+        verbose=1,
+
+    )
 
     # Train PPO on the PPO training dataset
     agent.learn(total_timesteps=hyperparams['ppo_timestamps'])
