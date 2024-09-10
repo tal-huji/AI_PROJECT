@@ -110,20 +110,31 @@ class DQNAgent_GRU(Agent):
         next_states = torch.FloatTensor(next_states).to(device)
         dones = torch.FloatTensor(dones).to(device)
 
-        hidden_state = None  # For simplicity, we don't store hidden states in the replay buffer
+        # No hidden state passed to the target model
+        hidden_state = None
+
+        # Ensure main model is in training mode
+        self.model.train()
+
+        # Calculate current Q-values using the main model
         current_q_values, _ = self.model(states, hidden_state)
         current_q_values = current_q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
 
-        next_q_values, _ = self.target_model(next_states, hidden_state)
-        next_q_values = next_q_values.max(1)[0]
+        # Target model should remain in eval mode (for stability)
+        with torch.no_grad():
+            # No hidden state passed into target model to avoid conflict with eval mode
+            next_q_values, _ = self.target_model(next_states, hidden_state)
+            next_q_values = next_q_values.max(1)[0]
 
         target_q_values = rewards + (1 - dones) * self.discount_factor * next_q_values
 
+        # Calculate loss and backpropagate
         loss = nn.MSELoss()(current_q_values, target_q_values)
         self.optimizer.zero_grad()
-        loss.backward()
+        loss.backward()  # This requires the main model to be in training mode
         self.optimizer.step()
 
+        # Decay exploration rate
         self.exploration_rate = max(self.exploration_min, self.exploration_rate * self.exploration_decay)
 
     def update_target_model(self):
@@ -145,6 +156,8 @@ class DQNAgent_GRU(Agent):
             episode_actions = []  # Track actions taken in this episode
 
             hidden_state = None  # Initialize hidden state for the GRU
+
+            self.model.train()
 
             while not done:
                 action, hidden_state = self.choose_action(state, hidden_state)
