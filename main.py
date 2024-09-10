@@ -109,6 +109,9 @@ def main(agent_type, interval_days, retrain):
             # If retraining is False, initialize a new agent for each ticker.
             if not retrain or agent is None:
                 agent = initialize_agent(agent_type, env_train, state_shape, action_size)
+            #
+            # if agent_type in ['dqn', 'dqn_lstm', 'dqn_gru']:
+            #     agent.model.train()
 
             agent.train_agent()
             test_portfolio_values, test_actions, final_portfolio_return, final_market_return = test_agent(agent, env_test, agent_type)
