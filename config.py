@@ -37,7 +37,7 @@ hyperparams = {
     # DQN-specific parameters
     'hidden_layer_size': 128,
     'lstm_hidden_size': 128,
-    'lstm_num_layers': 80,
+    'lstm_num_layers': 40,
     'memory_size': 1000,
     'batch_size': 16,
 }
