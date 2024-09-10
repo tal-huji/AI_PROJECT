@@ -18,7 +18,7 @@ from config import hyperparams
 #     return reward
 
 # Create trading environment
-def create_trading_env(df, dynamic_features, initial_portfolio_value=None):
+def create_trading_env(df, dynamic_features, initial_portfolio_value=None, initial_position=None):
     """
     Creates the trading environment, propagating the initial portfolio value if provided.
     """
@@ -30,6 +30,9 @@ def create_trading_env(df, dynamic_features, initial_portfolio_value=None):
     if initial_portfolio_value is None:
         initial_portfolio_value = hyperparams['portfolio_initial_value']
 
+    if initial_position is None:
+        initial_position = hyperparams['initial_position']
+
     env = TradingEnv(
         df=df,
         positions=hyperparams['positions'],
@@ -38,7 +41,7 @@ def create_trading_env(df, dynamic_features, initial_portfolio_value=None):
         windows=windows,
         verbose=verbose,
         dynamic_feature_functions=dynamic_features,
-        initial_position=hyperparams['initial_position'],
+        initial_position=initial_position,
         # reward_function=custom_reward_function
     )
 

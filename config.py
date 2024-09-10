@@ -8,10 +8,10 @@ hyperparams = {
     'algorithm': 'dqn_gru',  # q-learning, dqn, dqn_gru, dqn_lstm
     'interval_days': 60,
 
-    'start_year': '2021-01-01',
-    'end_year':'2024-01-01',
+    'start_year': '2022-01-01',
+    'end_year': None,
 
-    'initial_position': 1,  # Initial position (1=long, -1=short, 0=cash)  ,
+    'initial_position': 0,  # Initial position (1=long, -1=short, 0=cash)  ,
 
     'seed': 42,
     'n_episodes':1,
@@ -30,10 +30,10 @@ hyperparams = {
     'num_bins':2,
 
     # DQN-specific parameters
-    'hidden_layer_size': 3,
-    'lstm_hidden_size': 3,
-    'lstm_num_layers': 4,
-    'memory_size': 100000,
+    'hidden_layer_size': 128,
+    'lstm_hidden_size': 128,
+    'lstm_num_layers': 40,
+    'memory_size': 1000,
     'batch_size': 16,
 }
 
@@ -48,7 +48,13 @@ if hyperparams['algorithm'] == 'q-learning':
                                            bins=[-0.1, -0.05, 0, 0.05, 0.1]),
 
         lambda history: get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=7),
-                                           bins=[-0.1, -0.05, 0, 0.05, 0.1])
+                                           bins=[-0.1, -0.05, 0, 0.05, 0.1]),
+
+        lambda history: get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=15),
+                                             bins=[-0.1, -0.05, 0, 0.05, 0.1]),
+
+        lambda history: get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=30),
+                                                bins=[-0.1, -0.05, 0, 0.05, 0.1]),
     ]
 
 else:
