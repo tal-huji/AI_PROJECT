@@ -11,6 +11,8 @@ hyperparams = {
     'start_year': '2022-01-01',
     'end_year': None,
 
+    'retrain': True,
+
     'initial_position': 0,  # Initial position (1=long, -1=short, 0=cash)  ,
 
     'seed': 42,
@@ -30,8 +32,8 @@ hyperparams = {
     'num_bins':2,
 
     # DQN-specific parameters
-    'hidden_layer_size': 128,
-    'lstm_hidden_size': 128,
+    'hidden_layer_size': 8,
+    'lstm_hidden_size': 8,
     'lstm_num_layers': 40,
     'memory_size': 1000,
     'batch_size': 16,

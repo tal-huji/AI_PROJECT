@@ -127,7 +127,7 @@ def get_title(mode, algorithm_name, ticker):
 
     title = f'{mode} Performance on {ticker} from {start_date} to {end_date}'
     title += f'\n{algorithm_name} with {n_episodes} episodes, learning rate {learning_rate}'
-    title += f'\nPositions: {positions}'
+    title += f'\nPositions: {positions} | Retrain: {hyperparams["retrain"]}'
 
     if 'dqn' in algorithm_name.lower():
         title += f' | Hidden layers: {hyperparams["hidden_layer_size"]}'

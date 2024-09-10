@@ -1,10 +1,7 @@
 import math
-from textwrap import shorten
-
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import mplfinance as mpf
 import torch
 
 from device import device
@@ -26,7 +23,7 @@ def get_last_valid_value(values_list):
     return 0  # Return 0 if no valid value is found
 
 
-def main(agent_type, interval_days):
+def main(agent_type, interval_days, retrain):
     print(f"Running {agent_type.upper()} agent for training and testing each stock...")
 
     set_all_seeds(hyperparams['seed'])
@@ -43,6 +40,9 @@ def main(agent_type, interval_days):
     final_results = []
     initial_position = hyperparams['initial_position']
 
+    # Initialize agent only once if retraining is True
+    agent = None
+
     for ticker in tickers:
         print(f"\nTraining and testing for {ticker}...")
 
@@ -53,7 +53,6 @@ def main(agent_type, interval_days):
         df_full_year = fetch_data(ticker, start_year, end_year).sort_index()
         n_days = len(df_full_year)
 
-
         # Calculate the highest multiple of interval_days that fits into the total number of trading days
         max_n_intervals = math.floor(n_days / interval_days)
         adjusted_n_days = max_n_intervals * interval_days - 1  # This is the adjusted number of days
@@ -61,7 +60,7 @@ def main(agent_type, interval_days):
         # Track portfolio, market values, and buy-and-hold (market strategy)
 
         # Only take the adjusted number of trading days
-        trading_dates =   df_full_year.index[:adjusted_n_days]
+        trading_dates = df_full_year.index[:adjusted_n_days]
         portfolio_dict = {date: None for date in trading_dates}
         buy_hold_market_dict = {date: None for date in trading_dates}
         test_actions_dict = {date: None for date in trading_dates}
@@ -94,8 +93,14 @@ def main(agent_type, interval_days):
             state_shape = env_train.observation_space.shape
             action_size = env_train.action_space.n
 
-            # Initialize agent
-            agent = initialize_agent(agent_type, env_train, state_shape, action_size)
+            # If retraining is False, initialize a new agent for each ticker.
+            # If retraining is True, reuse the same agent and retrain on each stock.
+            if not retrain or agent is None:
+                agent = initialize_agent(agent_type, env_train, state_shape, action_size)
+
+            if retrain:
+                agent.train_env = env_train
+                agent.test_env = env_test
 
             print(f"Training agent for {ticker} from {df_train.index[0]} to {df_train.index[-1]}...")
             train_portfolio_values, train_actions = agent.train_agent()
@@ -121,7 +126,7 @@ def main(agent_type, interval_days):
 
             i += interval_days
 
-        if i ==0:
+        if i == 0:
             # Raise an error if the interval_days is too large
             raise ValueError(f"Interval days {interval_days} is too large for the total number of trading days {n_days}.")
 
@@ -139,7 +144,6 @@ def main(agent_type, interval_days):
 
     # Plot final results across all tickers
     plot_final_results(final_results)
-
 
 
 def initialize_agent(agent_type, env_train, state_shape, action_size):
@@ -166,6 +170,7 @@ def map_test_results_to_dates(df_test, test_portfolio_values, test_actions, port
             buy_hold_market_dict[date] = df_test['close'].iloc[j] * (hyperparams['portfolio_initial_value'] / initial_test_close_price)
         else:
             buy_hold_market_dict[date] = None
+
 
 def test_agent(agent, env_test, agent_type):
     """
@@ -207,7 +212,6 @@ def test_agent(agent, env_test, agent_type):
         portfolio_values.append(portfolio_value)
         actions.append(hyperparams['positions'][action])
 
-
     final_portfolio_value = portfolio_values[-1] if portfolio_values else 0
     final_portfolio_return = ((final_portfolio_value - initial_portfolio_value) / initial_portfolio_value) * 100 if initial_portfolio_value else 0
     final_market_return = ((final_market_value - initial_market_value) / initial_market_value) * 100 if initial_market_value else 0
@@ -234,49 +238,6 @@ def select_action(agent, agent_type, state):
         hashable = get_hashasble_state(state)
         q_values = agent.q_table[hashable]
     return q_values
-
-
-def calculate_final_returns(df_full_year, aligned_portfolio_values):
-    """
-    Calculate the final portfolio and market returns.
-    """
-    valid_portfolio_values = [val for val in aligned_portfolio_values if val is not None]
-
-    if len(valid_portfolio_values) == 0:
-        return 0, 0
-
-    initial_portfolio_value = valid_portfolio_values[0]
-    final_portfolio_value = valid_portfolio_values[-1]
-
-    initial_market_value = df_full_year['close'].iloc[0]
-    final_market_value = df_full_year['close'].iloc[-1]
-
-    total_portfolio_return = ((final_portfolio_value - initial_portfolio_value) / initial_portfolio_value) * 100
-    total_market_return = ((final_market_value - initial_market_value) / initial_market_value) * 100
-
-    return total_portfolio_return, total_market_return
-
-
-def calculate_final_buy_hold_returns(df_full_year, aligned_buy_hold_market_values):
-    """
-    Calculate the final buy-and-hold market returns.
-    """
-    valid_market_values = [val for val in aligned_buy_hold_market_values if val is not None]
-
-    if len(valid_market_values) == 0:
-        return 0
-
-    initial_market_value = valid_market_values[0]
-    final_market_value = valid_market_values[-1]
-
-    total_market_return = ((final_market_value - initial_market_value) / initial_market_value) * 100
-
-    return total_market_return
-
-
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 
 def plot_yearly_performance(ticker, df, portfolio_dict, buy_hold_dict, test_actions_dict):
     # Convert the dictionary values into lists aligned to the full year dates
@@ -342,7 +303,6 @@ def plot_yearly_performance(ticker, df, portfolio_dict, buy_hold_dict, test_acti
     # Show the plot
     plt.show()
 
-
 def plot_final_results(results):
     # bar plot for each stock showing percentage return of final buy-and-hold vs final portfolio value
 
@@ -397,5 +357,9 @@ def plot_final_results(results):
 
 
 # Example usage
-main(agent_type=hyperparams['algorithm'], interval_days=hyperparams['interval_days'])
+main(
+    agent_type=hyperparams['algorithm'],
+    interval_days=hyperparams['interval_days'],
+    retrain=hyperparams['retrain']
+)
 
