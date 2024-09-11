@@ -4,18 +4,18 @@ from sympy.physics.units import years
 import dynamic_features
 import numpy as np
 
-INTERVAL_SIZE = 18
+INTERVAL_SIZE = 60
 hyperparams = {
-    'algorithm': 'dqn_gru',  # q-learning, dqn, dqn_gru, dqn_lstm
+    'algorithm': 'dqn_gru',  # q-learning, dqn, dqn_gru, policy_gradient, policy_gradient_gru
     'interval_days': INTERVAL_SIZE,
 
 
-    'ppo_timestamps':50000,
+    'ppo_timestamps':1,
     'show_buy_sell_signals': True,
     'ppo_start_train': '2020-01-01',
 
-    'start_year': '2022-01-01',
-    'end_year': None,
+    'start_year': '2021-01-01',
+    'end_year': '2023-01-01',
 
     'retrain': False, # For interval training
 
@@ -38,8 +38,8 @@ hyperparams = {
     'num_bins':2,
 
     # DQN-specific parameters
-    'hidden_layer_size': 128,
-    'lstm_hidden_size': 128,
+    'hidden_layer_size': 3,
+    'lstm_hidden_size': 3,
     'lstm_num_layers': 40,
     'memory_size': 1000,
     'batch_size': 16,
@@ -70,12 +70,12 @@ else:
 
     # Non-discrete features for DQN
     dynamic_features_arr = [
-        #High-Low Range (covering more granular timeframes)
 
         # Price Change (covering more granular short, medium, and long-term windows)
         lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE//3),
         lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE//2),
-        lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE),
+        lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE),
+
 
         # Momentum (capturing trends over more granular timeframes)
         lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE//3),
@@ -88,15 +88,18 @@ else:
         lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE//2),
         lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE),
 
+
         # Bollinger Band Width (adding more intermediate windows)
         lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE//3),
         lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE//2),
         lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE),
 
+
         # Stochastic Oscillator (denser windows)
         lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE//3),
         lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE//2),
         lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE),
+
 
         # RSI (more windows for trend strength across different timeframes)
         lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE//3),
@@ -109,16 +112,19 @@ else:
         lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE//2),
         lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE),
 
+
         # Volume Moving Average (denser timeline for volume trends)
         lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE//3),
         lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE//2),
         lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE),
+
 
         # Exponential Moving Average (EMA with more windows)
         lambda history: dynamic_features.dynamic_feature_ema(history, window=INTERVAL_SIZE//3),
         lambda history: dynamic_features.dynamic_feature_ema(history, window=INTERVAL_SIZE//2),
         lambda history: dynamic_features.dynamic_feature_ema(history, window=INTERVAL_SIZE),
     ]
+
 
 
 

@@ -10,18 +10,18 @@ from online_normalization import OnlineNormalization
 from utils import set_all_seeds
 
 
-# GRU-based DQN model
-class DQN_GRU(nn.Module):
+# GRU-based Policy Network for Policy Gradient
+class PolicyNetwork_GRU(nn.Module):
     def __init__(self, state_dim, action_dim):
-        super(DQN_GRU, self).__init__()
+        super(PolicyNetwork_GRU, self).__init__()
 
         hidden_size = hyperparams['hidden_layer_size']
-        gru_hidden_size = hyperparams['lstm_hidden_size']  # Reusing the same hyperparameter for GRU
+        gru_hidden_size = hyperparams['lstm_hidden_size']  # Using the GRU hidden size from hyperparameters
         num_layers = hyperparams['lstm_num_layers']
 
         self.fc1 = nn.Linear(state_dim, hidden_size)  # Initial fully connected layer
         self.gru = nn.GRU(hidden_size, gru_hidden_size, num_layers, batch_first=True)  # GRU layer
-        self.fc2 = nn.Linear(gru_hidden_size, action_dim)  # Output layer for action values
+        self.fc2 = nn.Linear(gru_hidden_size, action_dim)  # Output layer for action probabilities
         self.init_weights()
 
     def init_weights(self):
@@ -40,29 +40,24 @@ class DQN_GRU(nn.Module):
             gru_out, hidden_state = self.gru(x, hidden_state)
 
         gru_out = gru_out[:, -1, :]  # Take the output from the last time step
-        return self.fc2(gru_out), hidden_state  # Output the Q-values and the hidden state
+        action_probs = torch.softmax(self.fc2(gru_out), dim=-1)  # Output action probabilities
+        return action_probs, hidden_state  # Output the action probabilities and hidden state
 
 
-# DQN Agent with GRU
-class DQNAgent_GRU(Agent):
+# GRU-based Policy Gradient Agent (REINFORCE with GRU)
+class PolicyGradientAgent_GRU(Agent):
     def __init__(self, train_env, state_shape, action_size):
         self.state_shape = state_shape
         self.action_size = action_size
         self.learning_rate = hyperparams['learning_rate']
         self.discount_factor = hyperparams['discount_factor']
-        self.exploration_rate = hyperparams['exploration_rate']
-        self.exploration_min = hyperparams['exploration_min']
-        self.exploration_decay = hyperparams['exploration_decay']
 
         state_dim = np.prod(state_shape)
 
-        self.model = DQN_GRU(state_dim, action_size).to(device)
-        self.target_model = DQN_GRU(state_dim, action_size).to(device)
-        self.target_model.load_state_dict(self.model.state_dict())
-        self.target_model.eval()
-
+        self.model = PolicyNetwork_GRU(state_dim, action_size).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.memory = []
+
         self.train_env = train_env
 
         # Initialize OnlineNormalization for normalizing states
@@ -73,72 +68,59 @@ class DQNAgent_GRU(Agent):
         self.normalizer.update(state)
         normalized_state = self.normalizer.normalize(state)
 
-        if np.random.rand() <= self.exploration_rate:
-            return np.random.randint(self.action_size), hidden_state
-
         state_tensor = torch.FloatTensor(normalized_state).unsqueeze(0).to(device)
-        with torch.no_grad():
-            q_values, hidden_state = self.model(state_tensor, hidden_state)
-        return q_values.max(1)[1].item(), hidden_state
+        action_probs, hidden_state = self.model(state_tensor, hidden_state)
+        action_distribution = torch.distributions.Categorical(action_probs)
+        action = action_distribution.sample().item()
+        return action, hidden_state
 
-    def remember(self, state, action, reward, next_state, done):
-        # Update and normalize both state and next_state before storing
-        self.normalizer.update(state)
-        self.normalizer.update(next_state)
+    def remember(self, state, action, reward):
+        # Store the normalized state, action, and reward for the episode
+        self.memory.append((state, action, reward))
 
-        normalized_state = self.normalizer.normalize(state)
-        normalized_next_state = self.normalizer.normalize(next_state)
+    def compute_returns(self, rewards):
+        """
+        Compute the discounted returns for each time step in an episode.
+        """
+        discounted_returns = []
+        cumulative_return = 0
+        for reward in reversed(rewards):
+            cumulative_return = reward + self.discount_factor * cumulative_return
+            discounted_returns.insert(0, cumulative_return)
+        return discounted_returns
 
-        self.memory.append((normalized_state, action, reward, normalized_next_state, done))
-        if len(self.memory) > hyperparams['memory_size']:
-            self.memory.pop(0)
+    def learn(self):
+        states, actions, rewards = zip(*self.memory)
 
-    def learn(self, batch_size):
-        if len(self.memory) < batch_size:
-            return
+        # Convert the list of numpy arrays to a single numpy array
+        states = np.array(states)  # Efficient conversion
 
-        batch = random.sample(self.memory, batch_size)
-        states = np.array([x[0] for x in batch])
-        actions = np.array([x[1] for x in batch])
-        rewards = np.array([x[2] for x in batch])
-        next_states = np.array([x[3] for x in batch])
-        dones = np.array([x[4] for x in batch])
+        # Compute discounted returns for the episode
+        returns = self.compute_returns(rewards)
 
+        # Normalize returns for stable training
+        returns = torch.FloatTensor(returns).to(device)
+        returns = (returns - returns.mean()) / (returns.std() + 1e-5)
+
+        # Convert states and actions to torch tensors
         states = torch.FloatTensor(states).to(device)
         actions = torch.LongTensor(actions).to(device)
-        rewards = torch.FloatTensor(rewards).to(device)
-        next_states = torch.FloatTensor(next_states).to(device)
-        dones = torch.FloatTensor(dones).to(device)
 
-        # No hidden state passed to the target model
+        # Compute loss as the negative log-probability of actions weighted by returns
+        loss = 0
         hidden_state = None
+        for i in range(len(states)):
+            action_probs, hidden_state = self.model(states[i].unsqueeze(0), hidden_state)
+            action_distribution = torch.distributions.Categorical(action_probs)
+            log_prob = action_distribution.log_prob(actions[i])
+            loss += -log_prob * returns[i]
 
-        # Ensure main model is in training mode
-        self.model.train()
-
-        # Calculate current Q-values using the main model
-        current_q_values, _ = self.model(states, hidden_state)
-        current_q_values = current_q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
-
-        # Target model should remain in eval mode (for stability)
-        with torch.no_grad():
-            # No hidden state passed into target model to avoid conflict with eval mode
-            next_q_values, _ = self.target_model(next_states, hidden_state)
-            next_q_values = next_q_values.max(1)[0]
-
-        target_q_values = rewards + (1 - dones) * self.discount_factor * next_q_values
-
-        # Calculate loss and backpropagate
-        loss = nn.MSELoss()(current_q_values, target_q_values)
         self.optimizer.zero_grad()
-        loss.backward()  # This requires the main model to be in training mode
+        loss.backward()
         self.optimizer.step()
 
-        # Decay exploration rate
-        self.exploration_rate = max(self.exploration_min, self.exploration_rate * self.exploration_decay)
-
-    def update_target_model(self):
-        self.target_model.load_state_dict(self.model.state_dict())
+        # Clear memory after updating
+        self.memory = []
 
     def train_agent(self):
         super().train_agent()
@@ -157,16 +139,14 @@ class DQNAgent_GRU(Agent):
 
             hidden_state = None  # Initialize hidden state for the GRU
 
-            self.model.train()
-
             while not done:
                 action, hidden_state = self.choose_action(state, hidden_state)
                 next_state, reward, terminated, truncated, info = self.train_env.step(action)
                 done = terminated or truncated
                 next_state = next_state.flatten()
 
-                self.remember(state, action, reward, next_state, done)
-                self.learn(hyperparams['batch_size'])
+                # Store the transition in memory
+                self.remember(state, action, reward)
 
                 # Track the action and portfolio value
                 episode_portfolio_values.append(info['portfolio_valuation'])  # Append portfolio value
@@ -175,22 +155,31 @@ class DQNAgent_GRU(Agent):
                 state = next_state
                 total_reward += reward
 
+            # Learn from the episode after it ends
+            self.learn()
+
             if episode == n_episodes - 1:  # If it's the last episode, store the values and actions for plotting
                 last_episode_portfolio_values = episode_portfolio_values
                 last_episode_actions = episode_actions
 
             if episode % 10 == 0:
-                self.update_target_model()
                 print(f"Episode {episode + 1}/{n_episodes}, Total Reward: {total_reward}")
 
         return last_episode_portfolio_values, last_episode_actions  # Return values and actions from the last episode
 
-
-    def get_q_values(self, state, hidden_state=None):
+    def get_action_probabilities(self, state, hidden_state=None):
+        """
+        Return action probabilities for a given state.
+        """
         self.normalizer.update(state)
         normalized_state = self.normalizer.normalize(state)
+
+        # Convert the state to a tensor and move to the appropriate device (CPU/GPU)
         state_tensor = torch.FloatTensor(normalized_state).unsqueeze(0).to(device)
 
+        # Ensure no gradients are calculated during inference
         with torch.no_grad():
-            q_values, hidden_state = self.model(state_tensor, hidden_state)
-        return q_values.cpu().numpy().flatten(), hidden_state
+            action_probs, hidden_state = self.model(state_tensor, hidden_state)
+
+        # Return the action probabilities as a numpy array
+        return action_probs.cpu().numpy().flatten(), hidden_state

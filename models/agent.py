@@ -15,7 +15,3 @@ class Agent(ABC):
     @abstractmethod
     def train_agent(self):
         pass
-
-    @abstractmethod
-    def test_agent(self):
-        pass

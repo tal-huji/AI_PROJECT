@@ -8,9 +8,10 @@ import torch
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from device import device
+from models.policy_gradient import PolicyGradientAgent
+from models.policy_gradient_gru import PolicyGradientAgent_GRU
 from utils import fetch_data, plot_performance, set_all_seeds
 from models.dqn_gru import DQNAgent_GRU
-from models.dqn_lstm import DQNAgent_LSTM
 from models.ql import QLearningAgent, get_hashasble_state
 from models.dqn import DQNAgent
 from env_utils import create_trading_env
@@ -34,12 +35,27 @@ def main(agent_type, interval_days, retrain):
     set_all_seeds(hyperparams['seed'])
 
     tickers = [
-        'GOOGL',
+        # 'PYPL',
+        # 'V',
+        # 'MA',
+        # 'AXP',
+        # 'GS',
+        # 'QCOM',
+        # 'ADBE',
+        # 'CRM',
+        # 'ORCL',
         'TSLA',
+        'GOOGL',
         'NFLX',
         'AAPL',
-        'AMZN',
+        # 'AMZN',
         'MSFT',
+        # 'INTC',
+        # 'META',
+        # 'NVDA',
+        # 'AMD',
+        # 'CSCO',
+        # 'IBM',
     ]
 
     final_results = []
@@ -109,9 +125,6 @@ def main(agent_type, interval_days, retrain):
             # If retraining is False, initialize a new agent for each ticker.
             if not retrain or agent is None:
                 agent = initialize_agent(agent_type, env_train, state_shape, action_size)
-            #
-            # if agent_type in ['dqn', 'dqn_lstm', 'dqn_gru']:
-            #     agent.model.train()
 
             agent.train_agent()
             test_portfolio_values, test_actions, final_portfolio_return, final_market_return = test_agent(agent, env_test, agent_type)
@@ -193,14 +206,12 @@ def initialize_agent(agent_type, env_train, state_shape, action_size):
         return QLearningAgent(env_train, None, action_size)
     elif agent_type == 'dqn':
         return DQNAgent(env_train, state_shape, action_size)
-    elif agent_type == 'dqn_lstm':
-        return DQNAgent_LSTM(env_train, state_shape, action_size)
     elif agent_type == 'dqn_gru':
         return DQNAgent_GRU(env_train, state_shape, action_size)
-    elif agent_type == 'ppo':
-        # Wrap the environment for Stable Baselines3 PPO (vectorized environment)
-        env_train = DummyVecEnv([lambda: env_train])  # Stable Baselines expects a vectorized env
-        return PPO('MlpPolicy', env_train, verbose=1)
+    elif agent_type =='policy_gradient':
+        return PolicyGradientAgent(env_train, state_shape, action_size)
+    elif agent_type == 'policy_gradient_gru':
+        return PolicyGradientAgent_GRU(env_train, state_shape, action_size)
     else:
         raise ValueError(f'Invalid agent type: {agent_type}')
 
@@ -226,12 +237,17 @@ def test_agent(agent, env_test, agent_type):
     state, _ = env_test.reset(seed=42)
     total_reward, done = 0, False
 
+    agent.exploration_rate = 0  # Set exploration rate to 0 for testing
+
     initial_portfolio_value = hyperparams['portfolio_initial_value']
     initial_market_value, final_market_value = None, None
 
     if agent_type in ['dqn', 'dqn_lstm', 'dqn_gru']:
         agent.model.eval()
         agent.target_model.eval()
+
+    if agent_type in ['policy_gradient', 'policy_gradient_gru']:
+        agent.model.eval()
 
     while not done:
         q_values = select_action(agent, agent_type, state)
@@ -240,15 +256,10 @@ def test_agent(agent, env_test, agent_type):
         next_state, reward, terminated, truncated, info = env_test.step(action)
         done = terminated or truncated
 
-        current_open_price = info.get('data_open', 0)
+        portfolio_value = info['portfolio_valuation']
+
         current_close_price = info.get('data_close', 0)
 
-        # Check if the necessary info is available
-        if 'portfolio_valuation' in info and current_open_price and current_close_price:
-            portfolio_value = info['portfolio_valuation'] * current_open_price / current_close_price
-        else:
-            portfolio_value = 0
-            print(f"Warning: Missing 'portfolio_valuation' or price data for test step. Info: {info}")
 
         initial_market_value = initial_market_value or current_close_price
         final_market_value = current_close_price
@@ -272,14 +283,25 @@ def select_action(agent, agent_type, state):
         state_tensor = torch.FloatTensor(normalized_state).unsqueeze(0).to(device)
         with torch.no_grad():
             if agent_type == 'dqn':
-                q_values = agent.model(state_tensor).detach().cpu().numpy()[0]
+                values_vec = agent.model(state_tensor).detach().cpu().numpy()[0]
             else:
-                q_values, _ = agent.model(state_tensor)
-                q_values = q_values.detach().cpu().numpy()[0]
+                values_vec, _ = agent.model(state_tensor)
+                values_vec = values_vec.detach().cpu().numpy()[0]
+
+    elif 'policy_gradient' in agent_type:
+        if agent_type == 'policy_gradient':
+            values_vec = agent.get_action_probabilities(state)
+        else:
+            values_vec, _ = agent.get_action_probabilities(state, hidden_state=None)
+
     elif agent_type == 'q-learning':
         hashable = get_hashasble_state(state)
-        q_values = agent.q_table[hashable]
-    return q_values
+        values_vec = agent.q_table[hashable]
+
+    else:
+        raise ValueError(f'Invalid agent type: {agent_type}')
+
+    return values_vec
 
 def plot_yearly_performance(
         ticker,
@@ -338,7 +360,7 @@ def plot_yearly_performance(
     # Plot portfolio vs buy-hold values
     ax.plot(trading_dates, interpolated_portfolio_values, label='Portfolio Value', color='orange')
     ax.plot(trading_dates, interpolated_buy_hold_values, label='Buy-and-Hold Value', color='blue')
-    ax.plot(trading_dates, interpolated_portfolio_values_ppo, label='Portfolio Value PPO', color='green')
+    ax.plot(trading_dates, interpolated_portfolio_values_ppo, label='Portfolio Value PPO', color='pink')
 
     # Add buy/sell markers
 
@@ -355,7 +377,7 @@ def plot_yearly_performance(
     if hyperparams['interval_days'] > 1:
         title += f' (Interval: {hyperparams["interval_days"]} days) | Retrain: {hyperparams["retrain"]}\n'
 
-    if 'dqn' in hyperparams['algorithm']:
+    if 'policy' or 'dqn' in hyperparams['algorithm']:
         title += 'Learning Rate: ' + str(hyperparams['learning_rate']) + ' | Hidden Layer Size: ' + str(hyperparams['hidden_layer_size'])
 
     if 'lstm' in hyperparams['algorithm'] or 'gru' in hyperparams['algorithm']:
@@ -442,6 +464,9 @@ def train_and_test_ppo(df_dates, ticker, interval_days, final_results, trading_d
     agent = PPO(
         'MlpPolicy',
         env_train_ppo,
+        n_steps=100,
+        learning_rate=hyperparams['learning_rate'],
+        batch_size=4,
         verbose=1,
 
     )
