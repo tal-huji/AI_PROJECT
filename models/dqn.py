@@ -8,7 +8,6 @@ from config import hyperparams
 from device import device
 from models.agent import Agent
 from online_normalization import OnlineNormalization
-from utils import set_all_seeds
 
 
 # DQN model with Layer Normalization (for small batches)

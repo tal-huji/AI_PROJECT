@@ -4,14 +4,7 @@ from collections import defaultdict
 from config import dynamic_features_arr, hyperparams
 from models.agent import Agent
 from online_normalization import OnlineNormalization
-
-
-def get_hashasble_state(state):
-    if isinstance(state, np.ndarray):
-        state = state.flatten()
-    elif isinstance(state, list):
-        state = np.array(state).flatten()
-    return tuple(state)
+from utils import get_hashasble_state
 
 
 class QLearningAgent(Agent):

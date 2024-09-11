@@ -1,18 +1,17 @@
-import os
-import torch
-import yfinance as yf
-import matplotlib.pyplot as plt
-import numpy as np
-from config import hyperparams
 
-# Set all seeds for reproducibility
-def set_all_seeds(seed):
-    np.random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+import yfinance as yf
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from config import hyperparams, dynamic_features_arr
+
+
+def get_hashasble_state(state):
+    if isinstance(state, np.ndarray):
+        state = state.flatten()
+    elif isinstance(state, list):
+        state = np.array(state).flatten()
+    return tuple(state)
 
 # Fetch data using yfinance
 def fetch_data(ticker, start, end):
@@ -26,114 +25,157 @@ def fetch_data(ticker, start, end):
     return df.dropna()
 
 
-def plot_performance(train_performance=None, test_performance=None, train_market_values=None, test_market_values=None,
-                     df_train=None, df_test=None, algorithm_name="", n_dynamic_features=0, ticker="",
-                     start_train="", end_train="", start_test="", end_test="",
-                     train_positions=None, test_positions=None):
-    # Set common parameters for the title
-    n_episodes = hyperparams['n_episodes']
-    learning_rate = hyperparams['learning_rate']
-    positions = hyperparams['positions']  # The list of possible actions (positions)
 
-    # Function to plot positions (actions) with different colors based on action indices
-    def plot_positions(ax, dates, positions_data, portfolio_values):
-        # Dictionary to track if a label has been added to the legend
-        label_added = {'sell_all': False, 'long': False, 'short': False}
+def plot_yearly_performance(
+    ticker,
+    df,
+    portfolio_dict,
+    buy_hold_dict,
+    test_actions_dict,
+    baseline_portfolio_dict,
+    baseline_buy_hold_dict,
+    baseline_actions_dict,
+    algorithm_name,
+    baseline_name='Baseline'
+):
+    """
+    Plot the yearly performance of the algorithm against the buy-and-hold strategy and a baseline model.
+    """
+    # Convert the dictionary values into lists aligned to the full year dates
+    trading_dates = df.index
 
-        # Loop through each position in the data
-        for i, pos in enumerate(positions_data):
-            if pos == 0:
-                ax.scatter(dates[i], portfolio_values[i], color='black', marker='o',zorder=3)
-                if not label_added['sell_all']:
-                    ax.scatter([], [], color='black', marker='o', s=50, label='Sell All')
-                    label_added['sell_all'] = True
-            elif pos > 0:
-                # size = 100 if pos == 1 else (25 + 25 * np.abs(pos))
-                ax.scatter(dates[i], portfolio_values[i], color='blue', marker='^',  zorder=3)
-                if not label_added['long']:
-                    ax.scatter([], [], color='blue', marker='^', s=50, label='Buy All')
-                    label_added['long'] = True
-            elif pos < 0:
-                # size = 25 if pos == -1 else (25 + 25 * np.abs(pos))
-                ax.scatter(dates[i], portfolio_values[i], color='red', marker='v',zorder=3)
-                if not label_added['short']:
-                    ax.scatter([], [], color='red', marker='v', s=50, label='Short')
-                    label_added['short'] = True
+    # Extract portfolio values, buy-hold values, and actions
+    portfolio_values = [portfolio_dict.get(date, None) for date in trading_dates]
+    buy_hold_values = [buy_hold_dict.get(date, None) for date in trading_dates]
+    test_actions = [test_actions_dict.get(date, None) for date in trading_dates]
 
-    # Plot Training performance if training data is provided
-    if train_performance is not None and df_train is not None:
-        fig, ax1 = plt.subplots(figsize=(12, 6))
+    baseline_portfolio_values = [baseline_portfolio_dict.get(date, None) for date in trading_dates]
+    baseline_buy_hold_values = [baseline_buy_hold_dict.get(date, None) for date in trading_dates]
+    baseline_actions = [baseline_actions_dict.get(date, None) for date in trading_dates]
 
-        train_dates = df_train.index[-len(train_performance):]
-        ax1.plot(train_dates, train_performance, label=f'{algorithm_name} Portfolio Value')
-        ax1.plot(train_dates, train_market_values[-len(train_performance):], label='Market Value', color='green')
+    # Convert lists to numpy arrays for interpolation
+    portfolio_values = np.array([np.nan if v is None else v for v in portfolio_values])
+    buy_hold_values = np.array([np.nan if v is None else v for v in buy_hold_values])
+    baseline_portfolio_values = np.array([np.nan if v is None else v for v in baseline_portfolio_values])
 
-        # Plot positions (actions taken by the agent) above the lines
-        if train_positions is not None:
-            plot_positions(ax1, train_dates, np.array(train_positions), np.array(train_performance))
+    # Interpolate missing values for portfolio and buy-hold values
+    interpolated_portfolio_values = pd.Series(portfolio_values).interpolate(method='linear').to_numpy()
+    interpolated_buy_hold_values = pd.Series(buy_hold_values).interpolate(method='linear').to_numpy()
+    interpolated_baseline_portfolio_values = pd.Series(baseline_portfolio_values).interpolate(method='linear').to_numpy()
 
+    # Generate buy/sell signals from the test actions dictionary
+    buy_signals = [np.nan] * len(test_actions)
+    sell_signals = [np.nan] * len(test_actions)
+    buy_signals_baseline = [np.nan] * len(baseline_actions)
+    sell_signals_baseline = [np.nan] * len(baseline_actions)
 
-        ax1.set_title(get_title('Training', algorithm_name, ticker))
-        ax1.set_xlabel('Date')
-        ax1.set_ylabel('Portfolio Value')
-        ax1.legend()
+    for i, action in enumerate(test_actions):
+        if action == 1:
+            buy_signals[i] = interpolated_portfolio_values[i]
+        elif action == 0:
+            sell_signals[i] = interpolated_portfolio_values[i]
 
-        plt.tight_layout()
-        plt.show()
+    for i, action in enumerate(baseline_actions):
+        if action == 1:
+            buy_signals_baseline[i] = interpolated_baseline_portfolio_values[i]
+        elif action == 0:
+            sell_signals_baseline[i] = interpolated_baseline_portfolio_values[i]
 
-    # Plot Testing performance if testing data is provided
-    if test_performance is not None and df_test is not None:
-        # Check that the test data lengths are aligned
-        test_performance_len = len(test_performance)
-        test_dates_len = len(df_test.index)
-        test_market_values_len = len(test_market_values)
+    # Plot the data
+    fig, ax = plt.subplots(figsize=(12, 6))
 
-        # Take the minimum of the lengths to avoid mismatch
-        min_test_len = min(test_performance_len, test_dates_len, test_market_values_len)
+    # Plot portfolio vs buy-hold values
+    ax.plot(trading_dates, interpolated_portfolio_values, label=f'{algorithm_name} Portfolio Value', color='orange')
+    ax.plot(trading_dates, interpolated_buy_hold_values, label='Buy-and-Hold Value', color='blue')
+    ax.plot(trading_dates, interpolated_baseline_portfolio_values, label=f'{baseline_name} Portfolio Value', color='purple')
 
-        # Only use the matching length for dates, performance, and market values
-        test_dates = df_test.index[-min_test_len:]
-        test_performance = test_performance[-min_test_len:]
-        test_market_values = test_market_values[-min_test_len:]
+    # Add buy/sell markers
+    if hyperparams['show_buy_sell_signals']:
+        ax.plot(trading_dates, buy_signals, '^', markersize=2, color='green', label='Buy Signal', linestyle='None')
+        ax.plot(trading_dates, sell_signals, 'o', markersize=2, color='black', label='Sell Signal', linestyle='None')
+        # ax.plot(trading_dates, buy_signals_baseline, '^', markersize=5, color='darkgreen', label=f'Buy Signal {baseline_name}', linestyle='None')
+        # ax.plot(trading_dates, sell_signals_baseline, 'o', markersize=5, color='gray', label=f'Sell Signal {baseline_name}', linestyle='None')
 
-        fig, ax2 = plt.subplots(figsize=(12, 6))
+    # Set title and labels
+    title = f'{ticker} - Yearly Performance - {algorithm_name.upper()} vs {baseline_name}'
 
-        ax2.plot(test_dates, test_performance, label=f'{algorithm_name} Portfolio Value')
-        ax2.plot(test_dates, test_market_values, label='Market Value', color='green')
+    if hyperparams['interval_days'] > 1:
+        title += f' (Interval: {hyperparams["interval_days"]} days) | Episodes: {hyperparams["n_episodes"]} | Retrain: {hyperparams["retrain"]}\n'
 
-        # Plot positions (actions taken by the agent) above the lines
-        if test_positions is not None:
-            test_positions = np.array(test_positions[-min_test_len:])  # Ensure positions match the test length
-            plot_positions(ax2, test_dates, test_positions, np.array(test_performance))
+    if 'policy' or 'dqn' in hyperparams['algorithm']:
+        title += f'Learning Rate: {hyperparams["learning_rate"]} | Hidden Layer Size: {hyperparams["hidden_layer_size"]}'
 
+    if 'lstm' in hyperparams['algorithm'] or 'gru' in hyperparams['algorithm']:
+        title += f' | Memory Num Layers: {hyperparams["lstm_num_layers"]}'
 
+    ax.set_title(title)
+    ax.set_ylabel('Value (USD)')
+    ax.set_xlabel('Date')
 
-        ax2.set_title(get_title('Testing', algorithm_name, ticker))
-        ax2.set_xlabel('Date')
-        ax2.set_ylabel('Portfolio Value')
-        ax2.legend()
+    # Add a legend
+    ax.legend()
 
-        plt.tight_layout()
-        plt.show()
+    # Format the x-axis for better readability
+    plt.xticks(rotation=45)
+    plt.tight_layout()
 
-
-def get_title(mode, algorithm_name, ticker):
-
-    n_episodes = hyperparams['n_episodes']
-    learning_rate = hyperparams['learning_rate']
-    positions = hyperparams['positions']  # The list of possible actions (positions)
-    start_date = hyperparams['start_date']
-    end_date = hyperparams['end_date']
-
-    title = f'{mode} Performance on {ticker} from {start_date} to {end_date}'
-    title += f'\n{algorithm_name} with {n_episodes} episodes, learning rate {learning_rate}'
-    title += f'\nPositions: {positions} | Retrain: {hyperparams["retrain"]}'
-
-    if 'dqn' in algorithm_name.lower():
-        title += f' | Hidden layers: {hyperparams["hidden_layer_size"]}'
-
-    if algorithm_name.lower() == 'dqn_lstm' or algorithm_name.lower() == 'dqn_gru':
-        title += f'\nLSTM with {hyperparams["lstm_num_layers"]} layers, hidden size {hyperparams["lstm_hidden_size"]}'
+    # Show the plot
+    plt.show()
 
 
-    return title
+def plot_final_results(results, baseline_results, algorithm_name, baseline_name='Baseline'):
+    """
+    Plot final results comparing algorithm performance vs buy-and-hold and a baseline.
+    """
+    # Close any previous figures to avoid creating a blank plot
+    plt.close()
+
+    # Bar plot for each stock showing percentage return of final buy-and-hold vs final portfolio value
+    tickers = [result['ticker'] for result in results]
+    final_portfolio_values = [result['final_portfolio_value'] for result in results]
+    final_buy_hold_values = [result['final_buy_hold'] for result in results]
+    final_portfolio_values_baseline = [result['final_portfolio_value'] for result in baseline_results]
+
+    # Calculate percentage returns for each stock
+    initial_investment = 10000  # Assuming 10000 initial investment for each stock
+    portfolio_returns = [(val - initial_investment) / initial_investment * 100 if val is not None else 0 for val in final_portfolio_values]
+    buy_hold_returns = [(val - initial_investment) / initial_investment * 100 if val is not None else 0 for val in final_buy_hold_values]
+    portfolio_returns_baseline = [(val - initial_investment) / initial_investment * 100 if val is not None else 0 for val in final_portfolio_values_baseline]
+
+    # Calculate total returns for the entire portfolio
+    total_portfolio_value = sum([val for val in final_portfolio_values if val is not None])
+    total_buy_hold_value = sum([val for val in final_buy_hold_values if val is not None])
+    total_portfolio_value_baseline = sum([val for val in final_portfolio_values_baseline if val is not None])
+
+    total_portfolio_return = ((total_portfolio_value - initial_investment * len(tickers)) / (initial_investment * len(tickers))) * 100
+    total_buy_hold_return = ((total_buy_hold_value - initial_investment * len(tickers)) / (initial_investment * len(tickers))) * 100
+    total_portfolio_return_baseline = ((total_portfolio_value_baseline - initial_investment * len(tickers)) / (initial_investment * len(tickers))) * 100
+
+    # Plot the data
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    x = np.arange(len(tickers))
+    width = 0.25  # Reduced the width to fit three bars
+
+    # Offset the bars for each group
+    ax.bar(x - width, portfolio_returns, width, label=f'{algorithm_name} Portfolio Return (%) {total_portfolio_return:.2f}%', color='orange')
+    ax.bar(x, buy_hold_returns, width, label=f'Buy-and-Hold Return (%) {total_buy_hold_return:.2f}%', color='blue')
+    ax.bar(x + width, portfolio_returns_baseline, width, label=f'{baseline_name} Portfolio Return (%) {total_portfolio_return_baseline:.2f}%', color='purple')
+
+    # Set title and labels
+    ax.set_title(f'{algorithm_name} vs Buy-and-Hold vs {baseline_name} - Portfolio Return (%)')
+    ax.set_ylabel('Return (%)')
+    ax.set_xlabel('Stock')
+
+    # Add a legend with the percentage returns in the labels
+    ax.legend()
+
+    # Set the x-axis labels to be the tickers
+    ax.set_xticks(x)
+    ax.set_xticklabels(tickers)
+
+    # Show the plot
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
+
