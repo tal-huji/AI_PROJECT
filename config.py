@@ -6,7 +6,7 @@ import numpy as np
 
 INTERVAL_SIZE = 60
 hyperparams = {
-    'algorithm': 'policy_gradient_gru',  # q-learning, dqn, dqn_gru, policy_gradient, policy_gradient_gru
+    'algorithm': 'dqn_gru',  # q-learning, dqn, dqn_gru, policy_gradient, policy_gradient_gru
     'interval_days': INTERVAL_SIZE,
 
 
@@ -22,7 +22,7 @@ hyperparams = {
     'initial_position': 0,  # Initial position (1=long, -1=short, 0=cash)  ,
 
     'seed': 42,
-    'n_episodes':1,
+    'n_episodes':10,
     'positions': [0,1],
     'discount_factor': 0.995,
     'exploration_rate': 1,
@@ -38,9 +38,9 @@ hyperparams = {
     'num_bins':2,
 
     # DQN-specific parameters
-    'hidden_layer_size': 512,
-    'lstm_hidden_size': 512,
-    'lstm_num_layers': 80,
+    'hidden_layer_size': 128,
+    'lstm_hidden_size': 128,
+    'lstm_num_layers': 5,
     'memory_size': 1000,
     'batch_size': 16,
 }

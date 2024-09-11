@@ -33,7 +33,7 @@ def main(agent_type, interval_days, retrain):
     print(f"Start training with hyperparameters: {hyperparams}")
     print(f"Number of dynamic features: {len(dynamic_features_arr)}")
 
-    set_all_seeds(hyperparams['seed'])
+    #set_all_seeds(hyperparams['seed'])
 
     tickers = [
         # 'PYPL',
@@ -361,7 +361,7 @@ def plot_yearly_performance(
     # Plot portfolio vs buy-hold values
     ax.plot(trading_dates, interpolated_portfolio_values, label='Portfolio Value', color='orange')
     ax.plot(trading_dates, interpolated_buy_hold_values, label='Buy-and-Hold Value', color='blue')
-    ax.plot(trading_dates, interpolated_portfolio_values_ppo, label='Portfolio Value PPO', color='pink')
+    ax.plot(trading_dates, interpolated_portfolio_values_ppo, label='Portfolio Value PPO', color='purple')
 
     # Add buy/sell markers
 
@@ -376,10 +376,10 @@ def plot_yearly_performance(
     title = f'{ticker} - Yearly Performance - {hyperparams["algorithm"].upper()}'
 
     if hyperparams['interval_days'] > 1:
-        title += f' (Interval: {hyperparams["interval_days"]} days) | Retrain: {hyperparams["retrain"]}\n'
+        title += f' (Interval: {hyperparams["interval_days"]} days) | Episodes: {hyperparams["n_episodes"]} | Retrain: {hyperparams["retrain"]}\n'
 
     if 'policy' or 'dqn' in hyperparams['algorithm']:
-        title += 'Learning Rate: ' + str(hyperparams['learning_rate']) + ' | Hidden Layer Size: ' + str(hyperparams['hidden_layer_size'])
+        title += f'Learning Rate: ' + str(hyperparams['learning_rate']) + ' | Hidden Layer Size: ' + str(hyperparams['hidden_layer_size'])
 
     if 'lstm' in hyperparams['algorithm'] or 'gru' in hyperparams['algorithm']:
         title += ' | Memory Num Layers: ' + str(hyperparams['lstm_num_layers'])
@@ -398,9 +398,12 @@ def plot_yearly_performance(
     # Show the plot
     plt.show()
 
-def plot_final_results(results, results_ppo):
-    # bar plot for each stock showing percentage return of final buy-and-hold vs final portfolio value
 
+def plot_final_results(results, results_ppo):
+    # Close any previous figures to avoid creating a blank plot
+    plt.close()
+
+    # bar plot for each stock showing percentage return of final buy-and-hold vs final portfolio value
     tickers = [result['ticker'] for result in results]
     final_portfolio_values = [result['final_portfolio_value'] for result in results]
     final_buy_hold_values = [result['final_buy_hold'] for result in results]
@@ -408,18 +411,24 @@ def plot_final_results(results, results_ppo):
 
     # Calculate percentage returns for each stock
     initial_investment = 10000  # Assuming 10000 initial investment for each stock
-    portfolio_returns = [(val - initial_investment) / initial_investment * 100 if val is not None else 0 for val in final_portfolio_values]
-    buy_hold_returns = [(val - initial_investment) / initial_investment * 100 if val is not None else 0 for val in final_buy_hold_values]
-    portfolio_returns_ppo = [(val - initial_investment) / initial_investment * 100 if val is not None else 0 for val in final_portfolio_values_ppo]
+    portfolio_returns = [(val - initial_investment) / initial_investment * 100 if val is not None else 0 for val in
+                         final_portfolio_values]
+    buy_hold_returns = [(val - initial_investment) / initial_investment * 100 if val is not None else 0 for val in
+                        final_buy_hold_values]
+    portfolio_returns_ppo = [(val - initial_investment) / initial_investment * 100 if val is not None else 0 for val in
+                             final_portfolio_values_ppo]
 
     # Calculate total returns for the entire portfolio
     total_portfolio_value = sum([val for val in final_portfolio_values if val is not None])
     total_buy_hold_value = sum([val for val in final_buy_hold_values if val is not None])
     total_portfolio_value_ppo = sum([val for val in final_portfolio_values_ppo if val is not None])
 
-    total_portfolio_return = ((total_portfolio_value - initial_investment * len(tickers)) / (initial_investment * len(tickers))) * 100
-    total_buy_hold_return = ((total_buy_hold_value - initial_investment * len(tickers)) / (initial_investment * len(tickers))) * 100
-    total_portfolio_return_ppo = ((total_portfolio_value_ppo - initial_investment * len(tickers)) / (initial_investment * len(tickers))) * 100
+    total_portfolio_return = ((total_portfolio_value - initial_investment * len(tickers)) / (
+                initial_investment * len(tickers))) * 100
+    total_buy_hold_return = ((total_buy_hold_value - initial_investment * len(tickers)) / (
+                initial_investment * len(tickers))) * 100
+    total_portfolio_return_ppo = ((total_portfolio_value_ppo - initial_investment * len(tickers)) / (
+                initial_investment * len(tickers))) * 100
 
     # Plot the data
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -428,23 +437,18 @@ def plot_final_results(results, results_ppo):
     width = 0.25  # Reduced the width to fit three bars
 
     # Offset the bars for each group
-    ax.bar(x - width, portfolio_returns, width, label='Portfolio Return (%)', color='orange')
-    ax.bar(x, buy_hold_returns, width, label='Buy-and-Hold Return (%)', color='blue')
-    ax.bar(x + width, portfolio_returns_ppo, width, label='Portfolio Return (%) PPO', color='green')
+    ax.bar(x - width, portfolio_returns, width, label=f'Portfolio Return (%) {total_portfolio_return:.2f}%',
+           color='orange')
+    ax.bar(x, buy_hold_returns, width, label=f'Buy-and-Hold Return (%) {total_buy_hold_return:.2f}%', color='blue')
+    ax.bar(x + width, portfolio_returns_ppo, width, label=f'Portfolio Return (%) PPO {total_portfolio_return_ppo:.2f}%',
+           color='purple')
 
     # Set title and labels
     ax.set_title('Portfolio Return (%) vs Buy-and-Hold Return (%) vs Portfolio Return (%) PPO')
     ax.set_ylabel('Return (%)')
     ax.set_xlabel('Stock')
 
-    algorithm_name = hyperparams['algorithm'].upper()
-
-    # Annotate the total returns on the plot
-    total_return_text = f'{algorithm_name} - Total Portfolio Return: {total_portfolio_return:.2f}%\nTotal Buy-and-Hold Return: {total_buy_hold_return:.2f}%\nTotal Portfolio Return PPO: {total_portfolio_return_ppo:.2f}%'
-    ax.text(0.95, 0.95, total_return_text, transform=ax.transAxes, fontsize=12,
-            verticalalignment='top', horizontalalignment='right', bbox=dict(facecolor='white', alpha=0.6))
-
-    # Add a legend
+    # Add a legend with the percentage returns in the labels
     ax.legend()
 
     # Set the x-axis labels to be the tickers
@@ -456,12 +460,14 @@ def plot_final_results(results, results_ppo):
     plt.tight_layout()
     plt.show()
 
+
 def train_and_test_ppo(df_dates, ticker, interval_days, final_results, trading_dates):
     df_ppo_test = df_dates.iloc[interval_days:]
     df_ppo_train = fetch_data(ticker, hyperparams['ppo_start_train'], df_ppo_test.index[0]).sort_index()
 
     env_train_ppo = create_trading_env(df_ppo_train, dynamic_features_arr, hyperparams['portfolio_initial_value'])
     env_train_ppo = DummyVecEnv([lambda: env_train_ppo])
+    env_train_ppo.reset()
 
     # Initialize PPO agent
     agent = PPO(
@@ -480,6 +486,7 @@ def train_and_test_ppo(df_dates, ticker, interval_days, final_results, trading_d
     # Create the test environment (same period as interval method)
     env_test_ppo = create_trading_env(df_ppo_test, dynamic_features_arr, hyperparams['portfolio_initial_value'])
     env_test_ppo = DummyVecEnv([lambda: env_test_ppo])
+    env_test_ppo.reset()
 
     # Test PPO on the test period
     test_portfolio_values, test_actions = test_ppo(agent, env_test_ppo)
