@@ -32,17 +32,18 @@ def main(agent_type, interval_days, retrain, baseline):
     #set_all_seeds(hyperparams['seed'])
 
     tickers = [
+        'NVDA',
+        'QCOM',
+        'ADBE',
+        'CRM',
+        'INTC',
+
         'TSLA',
         'GOOGL',
         'NFLX',
         'AAPL',
         'MSFT',
 
-        'NVDA',
-        'QCOM',
-        'ADBE',
-        'CRM',
-        'INTC',
 
         # 'ORCL',
         # 'AMZN',
@@ -78,7 +79,7 @@ def main(agent_type, interval_days, retrain, baseline):
 
         df_dates = df_full_year.loc[df_full_year.index.isin(trading_dates)]
 
-        print("Training and testing PPO...")
+        print("Testing baseline...")
         portfolio_dict_baseline, \
          buy_hold_market_dict_baseline, \
          test_actions_dict_baseline,\
