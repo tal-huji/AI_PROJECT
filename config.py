@@ -26,21 +26,18 @@ hyperparams = {
     'n_episodes':10,
     'positions': [0,1],
     'discount_factor': 0.995,
-    'exploration_rate': 0.5,
+    'exploration_rate': 1,
     'exploration_decay': 0.995,
     'exploration_min': 0.01,
     'trading_fees': 0.01,
     'portfolio_initial_value': 10000,
     'windows': 1,
     'verbose': 1,
-    'learning_rate': 0.00001,
-
-    # QL-specific parameters
-    'num_bins':2,
+    'learning_rate': 0.001,
 
     # DQN-specific parameters
-    'hidden_layer_size': 128,
-    'lstm_hidden_size': 128,
+    'hidden_layer_size': 3,
+    'lstm_hidden_size': 3,
     'lstm_num_layers': 5,
     'memory_size': 1000,
     'batch_size': 16,

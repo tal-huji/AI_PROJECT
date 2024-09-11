@@ -1,7 +1,5 @@
 import math
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 import torch
 from stable_baselines3.common.vec_env import DummyVecEnv
 from device import device
@@ -15,7 +13,6 @@ from env_utils import create_trading_env
 from config import hyperparams, dynamic_features_arr
 from stable_baselines3 import PPO
 import models.simple_agnet as simple_agent
-
 
 
 def get_last_valid_value(values_list):
@@ -35,24 +32,21 @@ def main(agent_type, interval_days, retrain, baseline):
     #set_all_seeds(hyperparams['seed'])
 
     tickers = [
-        # 'PYPL',
-        # 'V',
-        # 'MA',
-        # 'AXP',
-        # 'GS',
-        # 'QCOM',
-        # 'ADBE',
-        # 'CRM',
-        # 'ORCL',
         'TSLA',
         'GOOGL',
         'NFLX',
         'AAPL',
-        # 'AMZN',
         'MSFT',
-        # 'INTC',
+
+        'NVDA',
+        'QCOM',
+        'ADBE',
+        'CRM',
+        'INTC',
+
+        # 'ORCL',
+        # 'AMZN',
         # 'META',
-        # 'NVDA',
         # 'AMD',
         # 'CSCO',
         # 'IBM',
@@ -156,8 +150,6 @@ def main(agent_type, interval_days, retrain, baseline):
             portfolio_dict_baseline,
             buy_hold_market_dict_baseline,
             test_actions_dict_baseline,
-            algorithm_name=agent_type,
-
         )
         #
         # final_portfolio_result = portfolio_dict.get(trading_dates[-1], None)

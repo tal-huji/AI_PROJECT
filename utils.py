@@ -35,8 +35,6 @@ def plot_yearly_performance(
     baseline_portfolio_dict,
     baseline_buy_hold_dict,
     baseline_actions_dict,
-    algorithm_name,
-    baseline_name='Baseline'
 ):
     """
     Plot the yearly performance of the algorithm against the buy-and-hold strategy and a baseline model.
@@ -84,6 +82,9 @@ def plot_yearly_performance(
     # Plot the data
     fig, ax = plt.subplots(figsize=(12, 6))
 
+    algorithm_name = hyperparams['algorithm']
+    baseline_name = hyperparams['baseline_algorithm']
+
     # Plot portfolio vs buy-hold values
     ax.plot(trading_dates, interpolated_portfolio_values, label=f'{algorithm_name} Portfolio Value', color='orange')
     ax.plot(trading_dates, interpolated_buy_hold_values, label='Buy-and-Hold Value', color='blue')
@@ -123,7 +124,7 @@ def plot_yearly_performance(
     plt.show()
 
 
-def plot_final_results(results, baseline_results, algorithm_name, baseline_name='Baseline'):
+def plot_final_results(results, baseline_results):
     """
     Plot final results comparing algorithm performance vs buy-and-hold and a baseline.
     """
@@ -157,13 +158,16 @@ def plot_final_results(results, baseline_results, algorithm_name, baseline_name=
     x = np.arange(len(tickers))
     width = 0.25  # Reduced the width to fit three bars
 
+    algorithm_name = hyperparams['algorithm']
+    baseline_name = hyperparams['baseline_algorithm']
+
     # Offset the bars for each group
-    ax.bar(x - width, portfolio_returns, width, label=f'{algorithm_name} Portfolio Return (%) {total_portfolio_return:.2f}%', color='orange')
+    ax.bar(x - width, portfolio_returns, width, label=f'{algorithm_name.upper()} Portfolio Return (%) {total_portfolio_return:.2f}%', color='orange')
     ax.bar(x, buy_hold_returns, width, label=f'Buy-and-Hold Return (%) {total_buy_hold_return:.2f}%', color='blue')
-    ax.bar(x + width, portfolio_returns_baseline, width, label=f'{baseline_name} Portfolio Return (%) {total_portfolio_return_baseline:.2f}%', color='purple')
+    ax.bar(x + width, portfolio_returns_baseline, width, label=f'{baseline_name.upper()} Portfolio Return (%) {total_portfolio_return_baseline:.2f}%', color='purple')
 
     # Set title and labels
-    ax.set_title(f'{algorithm_name} vs Buy-and-Hold vs {baseline_name} - Portfolio Return (%)')
+    ax.set_title(f'{algorithm_name.upper()} vs Buy-and-Hold vs {baseline_name.upper()} - Portfolio Return (%)')
     ax.set_ylabel('Return (%)')
     ax.set_xlabel('Stock')
 

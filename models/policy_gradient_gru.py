@@ -21,13 +21,13 @@ class PolicyNetwork_GRU(nn.Module):
         self.fc1 = nn.Linear(state_dim, hidden_size)  # Initial fully connected layer
         self.gru = nn.GRU(hidden_size, gru_hidden_size, num_layers, batch_first=True)  # GRU layer
         self.fc2 = nn.Linear(gru_hidden_size, action_dim)  # Output layer for action probabilities
-        self.init_weights()
-
-    def init_weights(self):
-        for module in self.modules():
-            if isinstance(module, nn.Linear):
-                torch.nn.init.xavier_uniform_(module.weight)
-                torch.nn.init.zeros_(module.bias)
+    #     self.init_weights()
+    #
+    # def init_weights(self):
+    #     for module in self.modules():
+    #         if isinstance(module, nn.Linear):
+    #             torch.nn.init.xavier_uniform_(module.weight)
+    #             torch.nn.init.zeros_(module.bias)
 
     def forward(self, x, hidden_state=None):
         x = torch.relu(self.fc1(x))  # Pass through the first FC layer

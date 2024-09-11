@@ -10,29 +10,6 @@ from models.agent import Agent
 from online_normalization import OnlineNormalization
 
 
-# DQN model with Layer Normalization (for small batches)
-# class DQN(nn.Module):
-#     def __init__(self, state_dim, action_dim, hidden_size):
-#         super(DQN, self).__init__()
-#         self.fc1 = nn.Linear(state_dim, hidden_size)
-#         self.ln1 = nn.LayerNorm(hidden_size)  # Layer Norm instead of Batch Norm
-#         self.fc2 = nn.Linear(hidden_size, hidden_size)
-#         self.ln2 = nn.LayerNorm(hidden_size)  # Layer Norm instead of Batch Norm
-#         self.fc3 = nn.Linear(hidden_size, action_dim)
-#         self.init_weights()
-#
-#     def init_weights(self):
-#         for module in self.modules():
-#             if isinstance(module, nn.Linear):
-#                 torch.nn.init.xavier_uniform_(module.weight)
-#                 torch.nn.init.zeros_(module.bias)
-#
-#     def forward(self, x):
-#         x = torch.relu(self.ln1(self.fc1(x)))  # LayerNorm after first linear layer
-#         x = torch.relu(self.ln2(self.fc2(x)))  # LayerNorm after second linear layer
-#         return self.fc3(x)  # No LayerNorm after output layer
-
-
 # DQN model without normalization
 class DQN(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size):
@@ -40,13 +17,13 @@ class DQN(nn.Module):
         self.fc1 = nn.Linear(state_dim, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, action_dim)
-        self.init_weights()
-
-    def init_weights(self):
-        for module in self.modules():
-            if isinstance(module, nn.Linear):
-                torch.nn.init.xavier_uniform_(module.weight)
-                torch.nn.init.zeros_(module.bias)
+    #     self.init_weights()
+    #
+    # def init_weights(self):
+    #     for module in self.modules():
+    #         if isinstance(module, nn.Linear):
+    #             torch.nn.init.xavier_uniform_(module.weight)
+    #             torch.nn.init.zeros_(module.bias)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))

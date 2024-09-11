@@ -18,10 +18,6 @@ class QLearningAgent(Agent):
         self.exploration_decay = hyperparams['exploration_decay']
         self.exploration_min = hyperparams['exploration_min']
 
-        # Use the ordered min_max_array (array of tuples with min and max for each feature)
-        #self.min_max_array = min_max_array
-        #self.num_bins = hyperparams['num_bins']  # Use 20 bins as per your request
-
         # Initialize Q-table (discrete state, action pairs)
         self.q_table = defaultdict(lambda: np.zeros(action_size))
 

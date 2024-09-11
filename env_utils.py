@@ -3,7 +3,7 @@ from gym_trading_env.environments import TradingEnv
 from config import hyperparams
 
 # Create trading environment
-def create_trading_env(df, dynamic_features, initial_portfolio_value=None, initial_position=None):
+def create_trading_env(df, dynamic_features, initial_portfolio_value=None, initial_position=None, positions = None,):
     """
     Creates the trading environment, propagating the initial portfolio value if provided.
     """
