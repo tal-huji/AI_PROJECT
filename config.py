@@ -6,7 +6,7 @@ import numpy as np
 
 INTERVAL_SIZE = 60
 hyperparams = {
-    'algorithm': 'dqn_gru',  # q-learning, dqn, dqn_gru, policy_gradient, policy_gradient_gru
+    'algorithm': 'policy_gradient_gru',  # q-learning, dqn, dqn_gru, policy_gradient, policy_gradient_gru
     'interval_days': INTERVAL_SIZE,
 
 
@@ -14,8 +14,8 @@ hyperparams = {
     'show_buy_sell_signals': True,
     'ppo_start_train': '2020-01-01',
 
-    'start_year': '2021-01-01',
-    'end_year': '2023-01-01',
+    'start_year': '2022-01-01',
+    'end_year': '2024-01-01',
 
     'retrain': False, # For interval training
 
@@ -38,9 +38,9 @@ hyperparams = {
     'num_bins':2,
 
     # DQN-specific parameters
-    'hidden_layer_size': 3,
-    'lstm_hidden_size': 3,
-    'lstm_num_layers': 40,
+    'hidden_layer_size': 512,
+    'lstm_hidden_size': 512,
+    'lstm_num_layers': 80,
     'memory_size': 1000,
     'batch_size': 16,
 }

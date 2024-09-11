@@ -1,12 +1,10 @@
-import math
-from typing import final
 
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
 from stable_baselines3.common.vec_env import DummyVecEnv
-
 from device import device
 from models.policy_gradient import PolicyGradientAgent
 from models.policy_gradient_gru import PolicyGradientAgent_GRU
@@ -17,6 +15,9 @@ from models.dqn import DQNAgent
 from env_utils import create_trading_env
 from config import hyperparams, dynamic_features_arr
 from stable_baselines3 import PPO
+
+
+
 
 def get_last_valid_value(values_list):
     """
@@ -436,8 +437,10 @@ def plot_final_results(results, results_ppo):
     ax.set_ylabel('Return (%)')
     ax.set_xlabel('Stock')
 
+    algorithm_name = hyperparams['algorithm'].upper()
+
     # Annotate the total returns on the plot
-    total_return_text = f'Total Portfolio Return: {total_portfolio_return:.2f}%\nTotal Buy-and-Hold Return: {total_buy_hold_return:.2f}%\nTotal Portfolio Return PPO: {total_portfolio_return_ppo:.2f}%'
+    total_return_text = f'{algorithm_name} - Total Portfolio Return: {total_portfolio_return:.2f}%\nTotal Buy-and-Hold Return: {total_buy_hold_return:.2f}%\nTotal Portfolio Return PPO: {total_portfolio_return_ppo:.2f}%'
     ax.text(0.95, 0.95, total_return_text, transform=ax.transAxes, fontsize=12,
             verticalalignment='top', horizontalalignment='right', bbox=dict(facecolor='white', alpha=0.6))
 
