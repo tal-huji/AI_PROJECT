@@ -17,8 +17,6 @@ from models.ql import QLearningAgent, get_hashasble_state
 from models.dqn import DQNAgent
 from env_utils import create_trading_env
 from config import hyperparams, dynamic_features_arr
-from stable_baselines3 import PPO
-import models.simple_agnet as simple_agent
 
 
 def get_last_valid_value(values_list):
@@ -81,20 +79,20 @@ def main(agent_type, interval_days, retrain, baseline):
     #set_all_seeds(hyperparams['seed'])
 
     tickers = [
-        # 'GOOGL',
-        # 'NFLX',
-        # 'INTC',
-        # 'TSLA',
-        # 'AAPL',
+        'GOOGL',
+        'NFLX',
+        'INTC',
+        'TSLA',
+        'AAPL',
 
         # 'ORCL',
-        #'ADBE',
+        # 'ADBE',
         # 'MSFT',
         # 'QCOM',
         # 'CRM',
-        'BTC-USD',
-        'ETH-USD',
-        'LTC-USD',
+        # 'BTC-USD',
+        # 'ETH-USD',
+        # 'LTC-USD',
 
     ]
 
@@ -123,9 +121,6 @@ def main(agent_type, interval_days, retrain, baseline):
 
         df_dates = df_full_year.loc[df_full_year.index.isin(trading_dates)]
 
-
-
-
         portfolio_dict = {date: None for date in trading_dates}
         buy_hold_market_dict = {date: None for date in trading_dates}
         test_actions_dict = {date: None for date in trading_dates}
@@ -152,20 +147,9 @@ def main(agent_type, interval_days, retrain, baseline):
             # Define the training set with overlap: add the last day from the previous test
             df_train = df_dates.iloc[i:i + interval_days]
 
-            # df_train_augmented = df_train.copy()
-            #
-            # # Apply different augmentations to the dataset randomly or sequentially
-            # df_train_augmented = time_shift_data(df_train_augmented, shift_days=1)  # 1. Time Shifting
-            # df_train_augmented = add_gaussian_noise(df_train_augmented, feature_cols=['close', 'volume'], std_dev=0.01)  # 2. Gaussian Noise
-            # df_train_augmented = jitter_data(df_train_augmented, feature_cols=['close', 'volume'], jitter_factor=0.01)  # 3. Jittering
-            # df_train_augmented = bootstrap_resample(df_train_augmented, n_samples=len(df_train_augmented))  # 4. Bootstrapping
-            # df_train_augmented = time_warping(df_train_augmented, warp_factor=1.05)  # 5. Time Warping
-            # df_train_augmented = add_moving_averages(df_train_augmented, window_sizes=[5, 10])  # 6. Feature Engineering
-            #
-
             # Define the test set: start from the last day of the train and extend for the test interval
             end_test = i + interval_days + interval_days
-            df_test = df_dates.iloc[i + interval_days - 1: end_test]
+            df_test = df_dates.iloc[i + interval_days: end_test]
 
             if initial_portfolio_value is None:
                 initial_portfolio_value = hyperparams['portfolio_initial_value']

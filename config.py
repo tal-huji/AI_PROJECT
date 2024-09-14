@@ -32,7 +32,7 @@ hyperparams = {
     'portfolio_initial_value': 10000,
     'windows': 1,
     'verbose': 1,
-    'learning_rate': 0.000001, # Sometimes works better even with 0.000001
+    'learning_rate': 0.000001,
 
     # DQN-specific parameters
     'hidden_layer_size':128,
