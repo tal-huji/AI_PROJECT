@@ -1,50 +1,71 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import random
 import numpy as np
 from config import hyperparams
 from device import device
 from models.agent import Agent
 from online_normalization import OnlineNormalization
 
-
-# GRU-based Policy Network for Policy Gradient
-class PolicyNetwork_GRU(nn.Module):
+# CNN + GRU-based Policy Network for Policy Gradient
+class PolicyNetwork_GRU_CNN(nn.Module):
     def __init__(self, state_dim, action_dim):
-        super(PolicyNetwork_GRU, self).__init__()
+        super(PolicyNetwork_GRU_CNN, self).__init__()
 
         hidden_size = hyperparams['hidden_layer_size']
-        gru_hidden_size = hyperparams['lstm_hidden_size']  # Using the GRU hidden size from hyperparameters
+        gru_hidden_size = hyperparams['lstm_hidden_size']
         num_layers = hyperparams['lstm_num_layers']
 
-        self.fc1 = nn.Linear(state_dim, hidden_size)  # Initial fully connected layer
-        self.gru = nn.GRU(hidden_size, gru_hidden_size, num_layers, batch_first=True)  # GRU layer
-        self.fc2 = nn.Linear(gru_hidden_size, action_dim)  # Output layer for action probabilities
-    #     self.init_weights()
-    #
-    # def init_weights(self):
-    #     for module in self.modules():
-    #         if isinstance(module, nn.Linear):
-    #             torch.nn.init.xavier_uniform_(module.weight)
-    #             torch.nn.init.zeros_(module.bias)
+        # Define CNN layers
+        self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1)  # 1D Convolution layer
+        self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)  # Second 1D Convolution layer
+        self.pool = nn.MaxPool1d(kernel_size=2)  # Pooling layer to reduce the dimension
+
+        # Calculate the output dimension after the convolution layers
+        cnn_output_dim = state_dim // 2  # After pooling, it reduces by half
+
+        # Define the fully connected layer after CNN
+        self.fc1 = nn.Linear(cnn_output_dim * 32, hidden_size)  # Flatten and connect CNN to fully connected
+
+        # GRU layer
+        self.gru = nn.GRU(hidden_size, gru_hidden_size, num_layers, batch_first=True)
+
+        # Final output layer for action probabilities
+        self.fc2 = nn.Linear(gru_hidden_size, action_dim)
 
     def forward(self, x, hidden_state=None):
-        x = torch.relu(self.fc1(x))  # Pass through the first FC layer
-        x = x.unsqueeze(1)  # Add a sequence dimension for the GRU
+        # Input: (batch_size, state_dim), need to reshape for CNN
+        x = x.unsqueeze(1)  # Add a channel dimension (batch_size, 1, state_dim) for CNN
 
+        # Pass through the CNN layers
+        x = torch.relu(self.conv1(x))
+        x = torch.relu(self.conv2(x))
+        x = self.pool(x)  # Max Pooling
+
+        # Flatten the CNN output to feed into the fully connected layer
+        x = x.view(x.size(0), -1)
+
+        # Pass through the fully connected layer
+        x = torch.relu(self.fc1(x))
+
+        # Reshape to (batch_size, seq_length=1, hidden_size) for GRU input
+        x = x.unsqueeze(1)
+
+        # Pass through GRU layer
         if hidden_state is None:
             gru_out, hidden_state = self.gru(x)
         else:
             gru_out, hidden_state = self.gru(x, hidden_state)
 
-        gru_out = gru_out[:, -1, :]  # Take the output from the last time step
-        action_probs = torch.softmax(self.fc2(gru_out), dim=-1)  # Output action probabilities
-        return action_probs, hidden_state  # Output the action probabilities and hidden state
+        # Take the output from the last time step
+        gru_out = gru_out[:, -1, :]
 
+        # Output action probabilities
+        action_probs = torch.softmax(self.fc2(gru_out), dim=-1)
+        return action_probs, hidden_state
 
-# GRU-based Policy Gradient Agent (REINFORCE with GRU)
-class PolicyGradientAgent_GRU(Agent):
+# GRU + CNN-based Policy Gradient Agent (REINFORCE with GRU and CNN)
+class PolicyGradientAgent_GRU_CNN(Agent):
     def __init__(self, train_env, state_shape, action_size):
         self.state_shape = state_shape
         self.action_size = action_size
@@ -53,7 +74,8 @@ class PolicyGradientAgent_GRU(Agent):
 
         state_dim = np.prod(state_shape)
 
-        self.model = PolicyNetwork_GRU(state_dim, action_size).to(device)
+        # Initialize the CNN-GRU model
+        self.model = PolicyNetwork_GRU_CNN(state_dim, action_size).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.memory = []
 
@@ -92,7 +114,7 @@ class PolicyGradientAgent_GRU(Agent):
         states, actions, rewards = zip(*self.memory)
 
         # Convert the list of numpy arrays to a single numpy array
-        states = np.array(states)  # Efficient conversion
+        states = np.array(states)
 
         # Compute discounted returns for the episode
         returns = self.compute_returns(rewards)

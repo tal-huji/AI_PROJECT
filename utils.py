@@ -3,6 +3,8 @@ import yfinance as yf
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.pyplot import title
+
 from config import hyperparams, dynamic_features_arr
 
 
@@ -26,7 +28,7 @@ def fetch_data(ticker, start, end):
 
 
 
-def plot_yearly_performance(
+def plot_performance_through_time(
     ticker,
     df,
     portfolio_dict,
@@ -35,6 +37,7 @@ def plot_yearly_performance(
     baseline_portfolio_dict,
     baseline_buy_hold_dict,
     baseline_actions_dict,
+    interval
 ):
     """
     Plot the yearly performance of the algorithm against the buy-and-hold strategy and a baseline model.
@@ -98,16 +101,10 @@ def plot_yearly_performance(
         # ax.plot(trading_dates, sell_signals_baseline, 'o', markersize=5, color='gray', label=f'Sell Signal {baseline_name}', linestyle='None')
 
     # Set title and labels
-    title = f'{ticker} - Yearly Performance - {algorithm_name.upper()} vs {baseline_name}'
+    title = f'Interval: {interval}\n'
+    title  += f'{ticker} - Yearly Performance - {algorithm_name.upper()} vs {baseline_name}'
 
-    if hyperparams['interval_days'] > 1:
-        title += f' (Interval: {hyperparams["interval_days"]} days) | Episodes: {hyperparams["n_episodes"]} | Retrain: {hyperparams["retrain"]}\n'
-
-    if 'policy' or 'dqn' in hyperparams['algorithm']:
-        title += f'Learning Rate: {hyperparams["learning_rate"]} | Hidden Layer Size: {hyperparams["hidden_layer_size"]}'
-
-    if 'lstm' in hyperparams['algorithm'] or 'gru' in hyperparams['algorithm']:
-        title += f' | Memory Num Layers: {hyperparams["lstm_num_layers"]}'
+    title= add_params_to_title(title)
 
     ax.set_title(title)
     ax.set_ylabel('Value (USD)')
@@ -166,8 +163,9 @@ def plot_final_results(results, baseline_results):
     ax.bar(x, buy_hold_returns, width, label=f'Buy-and-Hold Return (%) {total_buy_hold_return:.2f}%', color='blue')
     ax.bar(x + width, portfolio_returns_baseline, width, label=f'{baseline_name.upper()} Portfolio Return (%) {total_portfolio_return_baseline:.2f}%', color='purple')
 
+
     # Set title and labels
-    ax.set_title(f'{algorithm_name.upper()} vs Buy-and-Hold vs {baseline_name.upper()} - Portfolio Return (%)')
+    ax.set_title(add_params_to_title(f'{algorithm_name.upper()} vs Buy-and-Hold vs {baseline_name.upper()} - Portfolio Return (%)'))
     ax.set_ylabel('Return (%)')
     ax.set_xlabel('Stock')
 
@@ -183,3 +181,18 @@ def plot_final_results(results, baseline_results):
     plt.tight_layout()
     plt.show()
 
+
+def add_params_to_title(initial_title):
+    title =initial_title
+
+    title += f' (Interval: {hyperparams["interval_days"]} days) | Episodes: {hyperparams["n_episodes"]} | Retrain: {hyperparams["retrain"]}\n'
+
+    if 'policy' or 'dqn' in hyperparams['algorithm']:
+        title += f'Learning Rate: {hyperparams["learning_rate"]} | Hidden Layer Size: {hyperparams["hidden_layer_size"]}'
+
+    if 'lstm' in hyperparams['algorithm'] or 'gru' in hyperparams['algorithm']:
+        title += f' | Memory Num Layers: {hyperparams["lstm_num_layers"]}'
+
+    title += f' | dynamic_features len: {len(dynamic_features_arr)} | Exploration Rate: {hyperparams["exploration_rate"]}'
+
+    return title

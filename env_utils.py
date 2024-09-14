@@ -22,12 +22,11 @@ def create_trading_env(df, dynamic_features, initial_portfolio_value=None, initi
         df=df,
         positions=hyperparams['positions'],
         trading_fees=trading_fees,
-        portfolio_initial_value=initial_portfolio_value,  # Pass the propagated value here
+        portfolio_initial_value=initial_portfolio_value,  # Pass the propagated portfolio value
         windows=windows,
         verbose=verbose,
         dynamic_feature_functions=dynamic_features,
-        initial_position=initial_position,
-        # reward_function=custom_reward_function
+        initial_position=initial_position, # Pass the propagated initial position
     )
 
     return env

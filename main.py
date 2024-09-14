@@ -1,11 +1,17 @@
 import math
+from random import random
+
 import numpy as np
 import torch
 from stable_baselines3.common.vec_env import DummyVecEnv
 from device import device
+from models.dqn_gru_cnn import DQNAgent_GRU_CNN
 from models.policy_gradient import PolicyGradientAgent
 from models.policy_gradient_gru import PolicyGradientAgent_GRU
-from utils import fetch_data, plot_yearly_performance, plot_final_results
+
+from models.policy_gradient_gru_cnn import PolicyGradientAgent_GRU_CNN
+from models.price_comparison_agent import PriceComparisonAgent
+from utils import fetch_data, plot_performance_through_time, plot_final_results
 from models.dqn_gru import DQNAgent_GRU
 from models.ql import QLearningAgent, get_hashasble_state
 from models.dqn import DQNAgent
@@ -24,37 +30,75 @@ def get_last_valid_value(values_list):
             return value
     return 0  # Return 0 if no valid value is found
 
+import numpy as np
+
+# 1. Time Shifting
+def time_shift_data(df, shift_days=1):
+    return df.shift(periods=shift_days).dropna()
+
+# 2. Add Gaussian Noise
+def add_gaussian_noise(df, feature_cols, std_dev=0.01):
+    df_aug = df.copy()
+    noise = np.random.normal(0, std_dev, df[feature_cols].shape)
+    df_aug[feature_cols] += noise
+    return df_aug
+
+# 3. Jittering Prices and Volumes
+def jitter_data(df, feature_cols, jitter_factor=0.01):
+    df_aug = df.copy()
+    df_aug[feature_cols] *= (1 + np.random.uniform(-jitter_factor, jitter_factor, df[feature_cols].shape))
+    return df_aug
+
+# 4. Bootstrapping / Resampling
+def bootstrap_resample(df, n_samples):
+    return df.sample(n=n_samples, replace=True).sort_index()
+
+# 5. Time Warping (slight compression or expansion of the time axis)
+def time_warping(df, warp_factor=1.1):
+    warped_length = int(len(df) * warp_factor)
+    return df.iloc[:warped_length]
+
+# 6. Feature Engineering (add moving averages)
+def add_moving_averages(df, window_sizes=[5, 10, 20]):
+    df_aug = df.copy()
+    for window in window_sizes:
+        df_aug[f"MA_{window}"] = df['close'].rolling(window=window).mean()
+    return df_aug.dropna()
+
 
 def main(agent_type, interval_days, retrain, baseline):
-    print(f"Start training with hyperparameters: {hyperparams}")
+    seed = 42
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    print("Start training with hyperparameters:")
+    for key, value in hyperparams.items():
+        print(f"{key}: {value}")
     print(f"Number of dynamic features: {len(dynamic_features_arr)}")
 
     #set_all_seeds(hyperparams['seed'])
 
     tickers = [
-        'NVDA',
-        'QCOM',
-        'ADBE',
-        'CRM',
-        'INTC',
-
-        'TSLA',
-        'GOOGL',
-        'NFLX',
-        'AAPL',
-        'MSFT',
-
+        # 'GOOGL',
+        # 'NFLX',
+        # 'INTC',
+        # 'TSLA',
+        # 'AAPL',
 
         # 'ORCL',
-        # 'AMZN',
-        # 'META',
-        # 'AMD',
-        # 'CSCO',
-        # 'IBM',
+        #'ADBE',
+        # 'MSFT',
+        # 'QCOM',
+        # 'CRM',
+        'BTC-USD',
+        'ETH-USD',
+        'LTC-USD',
+
     ]
 
     final_results = []
-    initial_position = hyperparams['initial_position']
     final_results_baseline = []
 
     # Initialize agent only once if retraining is True
@@ -79,26 +123,45 @@ def main(agent_type, interval_days, retrain, baseline):
 
         df_dates = df_full_year.loc[df_full_year.index.isin(trading_dates)]
 
-        print("Testing baseline...")
-        portfolio_dict_baseline, \
-         buy_hold_market_dict_baseline, \
-         test_actions_dict_baseline,\
-         baseline_results \
-            = train_and_test_baseline(df_dates, ticker, interval_days, final_results_baseline, trading_dates)
+
 
 
         portfolio_dict = {date: None for date in trading_dates}
         buy_hold_market_dict = {date: None for date in trading_dates}
         test_actions_dict = {date: None for date in trading_dates}
 
+        portfolio_dict_baseline = {date: None for date in trading_dates}
+        buy_hold_market_dict_baseline = {date: None for date in trading_dates}
+        test_actions_dict_baseline = {date: None for date in trading_dates}
+
         # Loop over train/test intervals, using the adjusted number of trading days
         i = 0
+        interval_count = 1
+
         initial_close_price = None
         initial_portfolio_value = None
+        initial_position = hyperparams['initial_position']
+
+        baseline_initial_portfolio_value = None
+        baseline_initial_position = hyperparams['initial_position']
 
         while i + interval_days <= adjusted_n_days:
+
+            print(f"*** Start interval interval {interval_count}/{max_n_intervals} for {ticker} ***")
+
             # Define the training set with overlap: add the last day from the previous test
             df_train = df_dates.iloc[i:i + interval_days]
+
+            # df_train_augmented = df_train.copy()
+            #
+            # # Apply different augmentations to the dataset randomly or sequentially
+            # df_train_augmented = time_shift_data(df_train_augmented, shift_days=1)  # 1. Time Shifting
+            # df_train_augmented = add_gaussian_noise(df_train_augmented, feature_cols=['close', 'volume'], std_dev=0.01)  # 2. Gaussian Noise
+            # df_train_augmented = jitter_data(df_train_augmented, feature_cols=['close', 'volume'], jitter_factor=0.01)  # 3. Jittering
+            # df_train_augmented = bootstrap_resample(df_train_augmented, n_samples=len(df_train_augmented))  # 4. Bootstrapping
+            # df_train_augmented = time_warping(df_train_augmented, warp_factor=1.05)  # 5. Time Warping
+            # df_train_augmented = add_moving_averages(df_train_augmented, window_sizes=[5, 10])  # 6. Feature Engineering
+            #
 
             # Define the test set: start from the last day of the train and extend for the test interval
             end_test = i + interval_days + interval_days
@@ -111,8 +174,8 @@ def main(agent_type, interval_days, retrain, baseline):
                 initial_close_price = df_test['close'].iloc[0]
 
             # Pass the propagated initial_portfolio_value when creating env_train and env_test
-            env_train = create_trading_env(df_train, dynamic_features_arr, initial_portfolio_value)
-            env_test = create_trading_env(df_test, dynamic_features_arr, initial_portfolio_value)
+            env_train = create_trading_env(df_train, dynamic_features_arr, initial_portfolio_value, initial_position)
+            env_test = create_trading_env(df_test, dynamic_features_arr, initial_portfolio_value, initial_position)
 
             state_shape = env_train.observation_space.shape
             action_size = env_train.action_space.n
@@ -139,19 +202,60 @@ def main(agent_type, interval_days, retrain, baseline):
                 initial_close_price
             )
 
+            if baseline_initial_portfolio_value is None:
+                baseline_initial_portfolio_value = hyperparams['portfolio_initial_value']
+
+            env_train_base = create_trading_env(df_train, dynamic_features_arr, baseline_initial_portfolio_value, baseline_initial_position)
+            env_test_base = create_trading_env(df_test, dynamic_features_arr, baseline_initial_portfolio_value, baseline_initial_position)
+
+            baseline_agent = PriceComparisonAgent()
+            baseline_agent.train_agent(env_train_base)
+
+            test_portfolio_values_baseline, test_actions_baseline, final_portfolio_return_baseline, final_market_return_baseline = (
+                test_agent(baseline_agent, env_test_base, 'price_comparison'))
+
+            initial_test_close_price = df_test['close'].iloc[0]
+
+            baseline_initial_portfolio_value = test_portfolio_values_baseline[-1] if test_portfolio_values_baseline else baseline_initial_portfolio_value
+            baseline_initial_position = test_actions_baseline[-1] if test_actions_baseline else baseline_initial_position
+
+            map_test_results_to_dates(
+                df_test,
+                test_portfolio_values_baseline,
+                test_actions_baseline,
+                portfolio_dict_baseline,
+                buy_hold_market_dict_baseline,
+                test_actions_dict_baseline,
+                initial_test_close_price
+
+            )
+
+            plot_performance_through_time(
+                ticker,
+                df_full_year,
+                portfolio_dict,
+                buy_hold_market_dict,
+                test_actions_dict,
+                portfolio_dict_baseline,
+                buy_hold_market_dict_baseline,
+                test_actions_dict_baseline,
+               interval = str(f'{interval_count+1}/{max_n_intervals}')
+            )
             i += interval_days
+            interval_count += 1
 
         # Plot yearly performance
-        plot_yearly_performance(
-            ticker,
-            df_full_year,
-            portfolio_dict,
-            buy_hold_market_dict,
-            test_actions_dict,
-            portfolio_dict_baseline,
-            buy_hold_market_dict_baseline,
-            test_actions_dict_baseline,
-        )
+        # plot_performance_through_time(
+        #     ticker,
+        #     df_full_year,
+        #     portfolio_dict,
+        #     buy_hold_market_dict,
+        #     test_actions_dict,
+        #     portfolio_dict_baseline,
+        #     buy_hold_market_dict_baseline,
+        #     test_actions_dict_baseline,
+        #     mode='FINAL RESULTS'
+        # )
         #
         # final_portfolio_result = portfolio_dict.get(trading_dates[-1], None)
         # final_buy_hold_result = buy_hold_market_dict.get(trading_dates[-1], None)
@@ -166,33 +270,42 @@ def main(agent_type, interval_days, retrain, baseline):
             'final_buy_hold': final_buy_hold_result
         })
 
+        final_portfolio_result_baseline = get_last_valid_value(portfolio_dict_baseline.values())
+        final_buy_hold_result_baseline = get_last_valid_value(buy_hold_market_dict_baseline.values())
+
+        final_results_baseline.append({
+            'ticker': ticker,
+            'final_portfolio_value': final_portfolio_result_baseline,
+            'final_buy_hold': final_buy_hold_result_baseline
+        })
+
 
 
     # Plot final results across all tickers
     plot_final_results(final_results, final_results_baseline)
 
 
-def test_ppo(agent, env_test):
-    """
-    Test a single agent across the entire dataset without breaking it into intervals.
-    """
-    obs = env_test.reset()
-    done = False
-    total_rewards = 0
-    portfolio_values = []
-    actions = []
-
-    while not done:
-        action, _ = agent.predict(obs)  # PPO uses predict method to get action
-        obs, rewards, done, info = env_test.step(action)
-        total_rewards += rewards
-
-        # Store portfolio values and actions for plotting
-        portfolio_values.append(info[0]['portfolio_valuation'])
-        actions.append(action[0])  # Actions will be in an array, so we take action[0]
-
-    # Return the portfolio values and actions to be used for plotting
-    return portfolio_values, actions
+# def test_ppo(agent, env_test):
+#     """
+#     Test a single agent across the entire dataset without breaking it into intervals.
+#     """
+#     obs = env_test.reset()
+#     done = False
+#     total_rewards = 0
+#     portfolio_values = []
+#     actions = []
+#
+#     while not done:
+#         action, _ = agent.predict(obs)  # PPO uses predict method to get action
+#         obs, rewards, done, info = env_test.step(action)
+#         total_rewards += rewards
+#
+#         # Store portfolio values and actions for plotting
+#         portfolio_values.append(info[0]['portfolio_valuation'])
+#         actions.append(action[0])  # Actions will be in an array, so we take action[0]
+#
+#     # Return the portfolio values and actions to be used for plotting
+#     return portfolio_values, actions
 
 
 
@@ -204,10 +317,14 @@ def initialize_agent(agent_type, env_train, state_shape, action_size):
         return DQNAgent(env_train, state_shape, action_size)
     elif agent_type == 'dqn_gru':
         return DQNAgent_GRU(env_train, state_shape, action_size)
+    elif agent_type == 'dqn_gru_cnn':
+        return DQNAgent_GRU_CNN(env_train, state_shape, action_size)
     elif agent_type =='policy_gradient':
         return PolicyGradientAgent(env_train, state_shape, action_size)
     elif agent_type == 'policy_gradient_gru':
         return PolicyGradientAgent_GRU(env_train, state_shape, action_size)
+    elif agent_type == 'policy_gradient_gru_cnn':
+        return PolicyGradientAgent_GRU_CNN(env_train, state_shape, action_size)
     else:
         raise ValueError(f'Invalid agent type: {agent_type}')
 
@@ -241,7 +358,7 @@ def test_agent(agent, env_test, agent_type):
     initial_portfolio_value = hyperparams['portfolio_initial_value']
     initial_market_value, final_market_value = None, None
 
-    if agent_type in ['dqn', 'dqn_lstm', 'dqn_gru']:
+    if 'dqn' in agent_type:
         agent.model.eval()
         agent.target_model.eval()
 
@@ -249,7 +366,7 @@ def test_agent(agent, env_test, agent_type):
         agent.model.eval()
 
     while not done:
-        if agent_type != 'simple':
+        if agent_type != 'simple' and agent_type != 'price_comparison':
             q_values = select_action(agent, agent_type, state)
             action = np.argmax(q_values)
         else:
@@ -279,8 +396,8 @@ def test_agent(agent, env_test, agent_type):
 
 
 def select_action(agent, agent_type, state):
-    if agent_type in ['dqn', 'dqn_lstm', 'dqn_gru']:
-        agent.normalizer.update(state)
+    if 'dqn' in agent_type:
+        #agent.normalizer.update(state)
         normalized_state = agent.normalizer.normalize(state)
         state_tensor = torch.FloatTensor(normalized_state).unsqueeze(0).to(device)
         with torch.no_grad():
@@ -306,58 +423,41 @@ def select_action(agent, agent_type, state):
     return values_vec
 
 
-def train_and_test_baseline(df_dates, ticker, interval_days, final_results, trading_dates):
-    if hyperparams['baseline_algorithm'] == 'ppo':
-        return train_and_test_ppo(df_dates, ticker, interval_days, final_results, trading_dates)
+# def train_and_test_baseline(df_dates, ticker, interval_days, final_results, trading_dates):
+#     # if hyperparams['baseline_algorithm'] == 'ppo':
+#     #     return train_and_test_ppo(df_dates, ticker, interval_days, final_results, trading_dates)
+#
+#     # el
+#     if hyperparams['baseline_algorithm'] == 'simple':
+#         return test_simple_agent(df_dates, ticker, interval_days, final_results, trading_dates)
+#     elif hyperparams['baseline_algorithm'] == 'price_comparison':
+#         return train_and_test_price_comparison_agent(df_dates, ticker, interval_days, final_results, trading_dates)
 
-    elif hyperparams['baseline_algorithm'] == 'simple':
-        return train_and_test_simple(df_dates, ticker, interval_days, final_results, trading_dates)
 
-def initialize_baseline_agent(baseline, env_train, state_shape, action_size):
-    if baseline == 'ppo':
-        return PPO(
-        'MlpPolicy',
-        env_train,
-        n_steps=100,
-        learning_rate=hyperparams['learning_rate'],
-        batch_size=4,
-        verbose=1,
+def train_and_test_price_comparison_agent(df_dates, ticker, interval_days, final_results, trading_dates):
+    df_test = df_dates.iloc[interval_days:]
 
-    )
-    elif baseline == 'simple':
-        return simple_agent.SimpleAgent(env_train, state_shape, action_size)
-    else:
-        raise ValueError(f'Invalid baseline algorithm: {baseline}')
+    # Initialize the Price Comparison agent
+    agent = PriceComparisonAgent()
 
-def train_and_test_simple(df_dates, ticker, interval_days, final_results, trading_dates):
-    df_simple_test = df_dates.iloc[interval_days:]
-    df_simple_train = fetch_data(ticker, hyperparams['ppo_start_train'], df_simple_test.index[0]).sort_index()
+    # Create the training environment and train the agent
+    env_train = create_trading_env(df_dates.iloc[:interval_days], dynamic_features_arr, hyperparams['portfolio_initial_value'])
+    agent.train_agent(env_train)
 
-    env_train_simple = create_trading_env(df_simple_train, dynamic_features_arr, hyperparams['portfolio_initial_value'])
-    env_train_simple = DummyVecEnv([lambda: env_train_simple])
-    env_train_simple.reset()
+    # Create the test environment
+    env_test = create_trading_env(df_test, dynamic_features_arr, hyperparams['portfolio_initial_value'])
 
-    # Initialize Simple agent
-    agent = simple_agent.SimpleAgent(env_train_simple, env_train_simple.observation_space.shape, env_train_simple.action_space.n)
-
-    # Train Simple on the Simple training dataset
-    agent.train_agent()
-
-    # Create the test environment (same period as interval method)
-    env_test_simple = create_trading_env(df_simple_test, dynamic_features_arr, hyperparams['portfolio_initial_value'])
-
-    # Test Simple on the test period
-    test_portfolio_values, test_actions, final_portfolio_return, final_market_return = test_agent(
-        agent, env_test_simple, hyperparams['baseline_algorithm'])
+    # Use the determined action for the entire test period
+    test_portfolio_values, test_actions, final_portfolio_return, final_market_return = test_agent(agent, env_test, 'price_comparison')
 
     portfolio_dict = {date: None for date in df_dates.index}
     buy_hold_market_dict = {date: None for date in df_dates.index}
     test_actions_dict = {date: None for date in df_dates.index}
 
-    initial_test_close_price = df_simple_test['close'].iloc[0]
+    initial_test_close_price = df_test['close'].iloc[0]
 
     map_test_results_to_dates(
-        df_simple_test,
+        df_test,
         test_portfolio_values,
         test_actions,
         portfolio_dict,
@@ -377,62 +477,105 @@ def train_and_test_simple(df_dates, ticker, interval_days, final_results, tradin
 
     return portfolio_dict, buy_hold_market_dict, test_actions_dict, final_results
 
-def train_and_test_ppo(df_dates, ticker, interval_days, final_results, trading_dates):
-    df_ppo_test = df_dates.iloc[interval_days:]
-    df_ppo_train = fetch_data(ticker, hyperparams['ppo_start_train'], df_ppo_test.index[0]).sort_index()
 
-    env_train_ppo = create_trading_env(df_ppo_train, dynamic_features_arr, hyperparams['portfolio_initial_value'])
-    env_train_ppo = DummyVecEnv([lambda: env_train_ppo])
-    env_train_ppo.reset()
 
-    # Initialize PPO agent
-    agent = PPO(
-        'MlpPolicy',
-        env_train_ppo,
-        n_steps=100,
-        learning_rate=hyperparams['learning_rate'],
-        batch_size=4,
-        verbose=1,
 
-    )
+# def test_simple_agent(df_dates, ticker, interval_days, final_results, trading_dates):
+#     df_simple_test = df_dates.iloc[interval_days:]
+#
+#     # Initialize Simple agent
+#     agent = simple_agent.SimpleAgent()
+#
+#     # Create the test environment (same period as interval method)
+#     env_test_simple = create_trading_env(df_simple_test, dynamic_features_arr, hyperparams['portfolio_initial_value'])
+#
+#     # Test Simple on the test period
+#     test_portfolio_values, test_actions, final_portfolio_return, final_market_return = test_agent(
+#         agent, env_test_simple, hyperparams['baseline_algorithm'])
+#
+#     portfolio_dict = {date: None for date in df_dates.index}
+#     buy_hold_market_dict = {date: None for date in df_dates.index}
+#     test_actions_dict = {date: None for date in df_dates.index}
+#
+#     initial_test_close_price = df_simple_test['close'].iloc[0]
+#
+#     map_test_results_to_dates(
+#         df_simple_test,
+#         test_portfolio_values,
+#         test_actions,
+#         portfolio_dict,
+#         buy_hold_market_dict,
+#         test_actions_dict,
+#         initial_test_close_price
+#     )
+#
+#     final_portfolio_result = get_last_valid_value(portfolio_dict.values())
+#     final_buy_hold_result = get_last_valid_value(buy_hold_market_dict.values())
+#
+#     final_results.append({
+#         'ticker': ticker,
+#         'final_portfolio_value': final_portfolio_result,
+#         'final_buy_hold': final_buy_hold_result
+#     })
+#
+#     return portfolio_dict, buy_hold_market_dict, test_actions_dict, final_results
 
-    # Train PPO on the PPO training dataset
-    agent.learn(total_timesteps=hyperparams['ppo_timestamps'])
-
-    # Create the test environment (same period as interval method)
-    env_test_ppo = create_trading_env(df_ppo_test, dynamic_features_arr, hyperparams['portfolio_initial_value'])
-    env_test_ppo = DummyVecEnv([lambda: env_test_ppo])
-    env_test_ppo.reset()
-
-    # Test PPO on the test period
-    test_portfolio_values, test_actions = test_ppo(agent, env_test_ppo)
-
-    portfolio_dict = {date: None for date in df_dates.index}
-    buy_hold_market_dict = {date: None for date in df_dates.index}
-    test_actions_dict = {date: None for date in df_dates.index}
-
-    initial_test_close_price = df_ppo_test['close'].iloc[0]
-
-    map_test_results_to_dates(
-        df_ppo_test,
-        test_portfolio_values,
-        test_actions,
-        portfolio_dict,
-        buy_hold_market_dict,
-        test_actions_dict,
-        initial_test_close_price
-    )
-
-    final_portfolio_result = get_last_valid_value(portfolio_dict.values())
-    final_buy_hold_result = get_last_valid_value(buy_hold_market_dict.values())
-
-    final_results.append({
-        'ticker': ticker,
-        'final_portfolio_value': final_portfolio_result,
-        'final_buy_hold': final_buy_hold_result
-    })
-
-    return portfolio_dict, buy_hold_market_dict, test_actions_dict, final_results
+# def train_and_test_ppo(df_dates, ticker, interval_days, final_results, trading_dates):
+#     df_ppo_test = df_dates.iloc[interval_days:]
+#     df_ppo_train = fetch_data(ticker, hyperparams['ppo_start_train'], df_ppo_test.index[0]).sort_index()
+#
+#     env_train_ppo = create_trading_env(df_ppo_train, dynamic_features_arr, hyperparams['portfolio_initial_value'])
+#     env_train_ppo = DummyVecEnv([lambda: env_train_ppo])
+#     env_train_ppo.reset()
+#
+#     # Initialize PPO agent
+#     agent = PPO(
+#         'MlpPolicy',
+#         env_train_ppo,
+#         n_steps=100,
+#         learning_rate=hyperparams['learning_rate'],
+#         batch_size=4,
+#         verbose=1,
+#
+#     )
+#
+#     # Train PPO on the PPO training dataset
+#     agent.learn(total_timesteps=hyperparams['ppo_timestamps'])
+#
+#     # Create the test environment (same period as interval method)
+#     env_test_ppo = create_trading_env(df_ppo_test, dynamic_features_arr, hyperparams['portfolio_initial_value'])
+#     env_test_ppo = DummyVecEnv([lambda: env_test_ppo])
+#     env_test_ppo.reset()
+#
+#     # Test PPO on the test period
+#     test_portfolio_values, test_actions = test_ppo(agent, env_test_ppo)
+#
+#     portfolio_dict = {date: None for date in df_dates.index}
+#     buy_hold_market_dict = {date: None for date in df_dates.index}
+#     test_actions_dict = {date: None for date in df_dates.index}
+#
+#     initial_test_close_price = df_ppo_test['close'].iloc[0]
+#
+#     map_test_results_to_dates(
+#         df_ppo_test,
+#         test_portfolio_values,
+#         test_actions,
+#         portfolio_dict,
+#         buy_hold_market_dict,
+#         test_actions_dict,
+#         initial_test_close_price
+#     )
+#
+#     final_portfolio_result = get_last_valid_value(portfolio_dict.values())
+#     final_buy_hold_result = get_last_valid_value(buy_hold_market_dict.values())
+#
+#     final_results.append({
+#         'ticker': ticker,
+#         'final_portfolio_value': final_portfolio_result,
+#         'final_buy_hold': final_buy_hold_result
+#     })
+#
+#     return portfolio_dict, buy_hold_market_dict, test_actions_dict, final_results
 
 
 # Example usage

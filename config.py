@@ -4,16 +4,16 @@ from sympy.physics.units import years
 import dynamic_features
 import numpy as np
 
-INTERVAL_SIZE = 60
+INTERVAL_SIZE = 30
 hyperparams = {
-    'algorithm': 'dqn_gru',  # q-learning, dqn, dqn_gru, policy_gradient, policy_gradient_gru
-    'baseline_algorithm': 'simple',  # ppo, simple
+    'algorithm': 'dqn_gru_cnn',
+    # q-learning, dqn, dqn_gru, dqn_gru_cnn, policy_gradient, policy_gradient_gru, policy_gradient_gru_cnn
+
+    'baseline_algorithm': 'price_comparison',  # price_comparison
     'interval_days': INTERVAL_SIZE,
+    'baseline_interval_days': INTERVAL_SIZE,
 
-
-    'ppo_timestamps':1,
     'show_buy_sell_signals': True,
-    'ppo_start_train': '2020-01-01',
 
     'start_year': '2022-01-01',
     'end_year': '2024-01-01',
@@ -22,104 +22,197 @@ hyperparams = {
 
     'initial_position': 0,  # Initial position (1=long, -1=short, 0=cash)  ,
 
-    'seed': 42,
     'n_episodes':10,
     'positions': [0,1],
     'discount_factor': 0.995,
-    'exploration_rate': 1,
+    'exploration_rate':0.4,
     'exploration_decay': 0.995,
     'exploration_min': 0.01,
     'trading_fees': 0.01,
     'portfolio_initial_value': 10000,
     'windows': 1,
     'verbose': 1,
-    'learning_rate': 0.0001,
+    'learning_rate': 0.000001, # Sometimes works better even with 0.000001
 
     # DQN-specific parameters
-    'hidden_layer_size': 128,
+    'hidden_layer_size':128,
     'lstm_hidden_size': 128,
-    'lstm_num_layers': 5,
+    'lstm_num_layers': 3,
     'memory_size': 1000,
-    'batch_size': 16,
 }
-
 
 
 def get_discrete_value(value, bins):
     return np.digitize(value, bins)
 
-if 'dqn' or 'policy' not in hyperparams['algorithm']:
+# Discrete features for Q-learning, simple etc...
+if 'dqn' not in hyperparams['algorithm'] and 'policy' not in hyperparams['algorithm']:
     dynamic_features_arr = [
-        lambda history: get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE//3),
-                                           bins=[-0.1, -0.05, 0, 0.05, 0.1]),
 
-        lambda history: get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE//2),
-                                           bins=[-0.1, -0.05, 0, 0.05, 0.1]),
+        lambda history: get_discrete_value(dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=INTERVAL_SIZE),
+                                                bins=[0.9, 1.0, 1.1]),
 
-        lambda history: get_discrete_value(dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE),
-                                             bins=[-0.1, -0.05, 0, 0.05, 0.1]),
+        lambda history: get_discrete_value(dynamic_features.dynamic_feature_sma(history, window=INTERVAL_SIZE//3),
+                                                bins=[0.9, 1.0, 1.1]),
+
+        lambda history: get_discrete_value(dynamic_features.dynamic_feature_sma(history, window=INTERVAL_SIZE//2),
+
+                                                bins=[0.9, 1.0, 1.1]),
     ]
 
 else:
 
 
-    # Non-discrete features for DQN
+    # Non-discrete features for gradient-based algorithms
+    # dynamic_features_arr = [
+    #     # *[lambda history, t=w: dynamic_features.dynamic_stock_price_at_time(history, time=t) for w in
+    #     #   range(1, INTERVAL_SIZE + 1)], # Too much noise?
+    #
+    #     lambda history: dynamic_features.dynamic_feature_last_position_taken(history),
+    #     lambda history: dynamic_features.dynamic_feature_real_position(history),
+    #
+    #     lambda history: dynamic_features.dynamic_stock_price_at_time(history, time=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_stock_price_at_time(history, time=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_stock_price_at_time(history, time=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_sma(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_sma(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_sma(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_adjusted_close_ema_ratio(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_adjusted_close_ema_ratio(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_adjusted_close_ema_ratio(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_ema(history, window=INTERVAL_SIZE // 3),
+    #     lambda history: dynamic_features.dynamic_feature_ema(history, window=INTERVAL_SIZE // 2),
+    #     lambda history: dynamic_features.dynamic_feature_ema(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE),
+    #
+    #     lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE//3),
+    #     lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE//2),
+    #     lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE),
+    # ]
+
     dynamic_features_arr = [
+        *[lambda history, t=w: dynamic_features.dynamic_stock_price_at_time(history, time=t) for w in
+          range(1, INTERVAL_SIZE + 1)], # Too much noise?
+        lambda history: dynamic_features.dynamic_feature_last_position_taken(history),
+        lambda history: dynamic_features.dynamic_feature_real_position(history),
 
-        # Price Change (covering more granular short, medium, and long-term windows)
-        lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE//3),
-        lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE//2),
-        lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE),
-
-
-        # Momentum (capturing trends over more granular timeframes)
-        lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE//3),
-        lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE//2),
-        lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE),
-
-
-        # ATR (Average True Range over more windows)
-        lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE//3),
-        lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE//2),
-        lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE),
-
-
-        # Bollinger Band Width (adding more intermediate windows)
-        lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE//3),
-        lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE//2),
-        lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE),
-
-
-        # Stochastic Oscillator (denser windows)
-        lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE//3),
-        lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE//2),
-        lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE),
-
-
-        # RSI (more windows for trend strength across different timeframes)
-        lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE//3),
-        lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE//2),
-        lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE),
-
-
-        # Price Difference (more granular windows)
-        lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE//3),
-        lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE//2),
-        lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE),
-
-
-        # Volume Moving Average (denser timeline for volume trends)
-        lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE//3),
-        lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE//2),
-        lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE),
-
-
-        # Exponential Moving Average (EMA with more windows)
-        lambda history: dynamic_features.dynamic_feature_ema(history, window=INTERVAL_SIZE//3),
-        lambda history: dynamic_features.dynamic_feature_ema(history, window=INTERVAL_SIZE//2),
-        lambda history: dynamic_features.dynamic_feature_ema(history, window=INTERVAL_SIZE),
+        # Stock price at dispersed points in time
+        # lambda history: dynamic_features.dynamic_stock_price_at_time(history, time=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_stock_price_at_time(history, time=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_stock_price_at_time(history, time=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_stock_price_at_time(history, time=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_stock_price_at_time(history, time=INTERVAL_SIZE),
+        #
+        # # Price change over dispersed windows
+        # lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_price_change(history, window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_price_change(history, window=INTERVAL_SIZE),
+        #
+        # # Adjusted close-to-SMA ratio with spread-out time windows
+        # lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history,
+        #                                                                           window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_adjusted_close_sma_ratio(history, window=INTERVAL_SIZE),
+        #
+        # # Simple Moving Average (SMA) over more dispersed windows
+        # lambda history: dynamic_features.dynamic_feature_sma(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_sma(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_sma(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_sma(history, window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_sma(history, window=INTERVAL_SIZE),
+        #
+        # # Exponential Moving Average (EMA) ratio
+        # lambda history: dynamic_features.dynamic_feature_adjusted_close_ema_ratio(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_adjusted_close_ema_ratio(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_adjusted_close_ema_ratio(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_adjusted_close_ema_ratio(history,
+        #                                                                           window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_adjusted_close_ema_ratio(history, window=INTERVAL_SIZE),
+        #
+        # # Momentum indicators over different time windows
+        # lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_momentum(history, window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_momentum(history, window=INTERVAL_SIZE),
+        #
+        # # Volatility indicator (ATR) over dispersed time windows
+        # lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_atr(history, window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_atr(history, window=INTERVAL_SIZE),
+        #
+        # # Bollinger Band width over dispersed windows
+        # lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_bollinger_band_width(history, window=INTERVAL_SIZE),
+        #
+        # # Stochastic Oscillator
+        # lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_stochastic_oscillator(history, window=INTERVAL_SIZE),
+        #
+        # # RSI over different time windows
+        # lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_rsi(history, window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_rsi(history, window=INTERVAL_SIZE),
+        #
+        # # Price difference over dispersed time windows
+        # lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_price_diff(history, window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_price_diff(history, window=INTERVAL_SIZE),
+        #
+        # # Volume moving averages over different windows
+        # lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE // 8),
+        # lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE // 2),
+        # lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=3 * INTERVAL_SIZE // 4),
+        # lambda history: dynamic_features.dynamic_feature_volume_ma(history, window=INTERVAL_SIZE),
     ]
-
-
-
-

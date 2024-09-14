@@ -17,13 +17,7 @@ class DQN(nn.Module):
         self.fc1 = nn.Linear(state_dim, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, action_dim)
-    #     self.init_weights()
-    #
-    # def init_weights(self):
-    #     for module in self.modules():
-    #         if isinstance(module, nn.Linear):
-    #             torch.nn.init.xavier_uniform_(module.weight)
-    #             torch.nn.init.zeros_(module.bias)
+
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))
@@ -122,7 +116,7 @@ class DQNAgent(Agent):
         n_episodes = hyperparams['n_episodes']
 
         for episode in range(n_episodes):
-            state, _ = self.train_env.reset(seed=hyperparams['seed'])
+            state, _ = self.train_env.reset()
             state = state.flatten()
             total_reward = 0
             done = False
