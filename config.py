@@ -6,7 +6,7 @@ import numpy as np
 
 INTERVAL_SIZE = 30
 hyperparams = {
-    'algorithm': 'dqn_gru_cnn',
+    'algorithm': 'policy_gradient_gru_cnn',
     # q-learning, dqn, dqn_gru, dqn_gru_cnn, policy_gradient, policy_gradient_gru, policy_gradient_gru_cnn
 
     'baseline_algorithm': 'price_comparison',  # price_comparison
@@ -38,6 +38,7 @@ hyperparams = {
     'hidden_layer_size':128,
     'lstm_hidden_size': 128,
     'lstm_num_layers': 3,
+    'sequence_length': 3, # For DQN-GRU-CNN, needs to relative to the interval size
     'memory_size': 1000,
 }
 

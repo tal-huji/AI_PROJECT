@@ -8,8 +8,7 @@ from device import device
 from models.agent import Agent
 from online_normalization import OnlineNormalization
 
-
-# CNN + GRU-based DQN model
+# CNN + GRU-based DQN model without batching
 class DQN_GRU_CNN(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(DQN_GRU_CNN, self).__init__()
@@ -24,10 +23,10 @@ class DQN_GRU_CNN(nn.Module):
         self.pool = nn.MaxPool1d(kernel_size=2)
 
         # After CNN, flatten output and feed into fully connected layers
-        cnn_output_dim = state_dim // 2  # Assuming pooling reduces the dimension by half
-        self.fc1 = nn.Linear(cnn_output_dim * 32, hidden_size)
+        self.cnn_output_dim = (state_dim // 2) * 32  # Assuming pooling reduces the dimension by half
+        self.fc1 = nn.Linear(self.cnn_output_dim, hidden_size)
 
-        # Adding deeper fully connected layers
+        # Additional fully connected layers
         self.fc2 = nn.Linear(hidden_size, hidden_size)  # Additional layer 1
         self.fc3 = nn.Linear(hidden_size, hidden_size)  # Additional layer 2
 
@@ -38,7 +37,10 @@ class DQN_GRU_CNN(nn.Module):
         self.fc_output = nn.Linear(gru_hidden_size, action_dim)
 
     def forward(self, x, hidden_state=None):
-        # Reshape input for CNN: (batch_size, 1, state_dim)
+        # x shape: (sequence_length, state_dim)
+        seq_len, state_dim = x.size()
+
+        # Reshape input for CNN: (sequence_length, 1, state_dim)
         x = x.unsqueeze(1)
 
         # Pass through CNN layers
@@ -47,15 +49,15 @@ class DQN_GRU_CNN(nn.Module):
         x = self.pool(x)  # Apply max pooling
 
         # Flatten the output for the fully connected layer
-        x = x.view(x.size(0), -1)
+        x = x.view(seq_len, -1)
         x = torch.relu(self.fc1(x))  # Pass through the first fully connected layer
 
         # Pass through the additional fully connected layers
-        x = torch.relu(self.fc2(x))  # Fully connected layer 2
-        x = torch.relu(self.fc3(x))  # Fully connected layer 3
+        x = torch.relu(self.fc2(x))
+        x = torch.relu(self.fc3(x))
 
-        # Add sequence dimension for GRU: (batch_size, 1, hidden_size)
-        x = x.unsqueeze(1)
+        # Reshape for GRU: (1, sequence_length, hidden_size)
+        x = x.unsqueeze(0)
 
         # Pass through the GRU layer
         if hidden_state is None:
@@ -63,17 +65,39 @@ class DQN_GRU_CNN(nn.Module):
         else:
             gru_out, hidden_state = self.gru(x, hidden_state)
 
-        gru_out = gru_out[:, -1, :]  # Take output from the last time step
+        # Output Q-values for each time step
+        q_values = self.fc_output(gru_out.squeeze(0))  # Output shape: (sequence_length, action_dim)
+        return q_values, hidden_state
 
-        # Output Q-values
-        return self.fc_output(gru_out), hidden_state
+# Replay Buffer that stores sequences
+class ReplayBuffer:
+    def __init__(self, capacity, sequence_length):
+        self.capacity = capacity
+        self.sequence_length = sequence_length
+        self.buffer = []
+        self.position = 0
 
+    def add(self, episode):
+        """Add an episode (sequence of transitions) to the buffer."""
+        if len(episode) >= self.sequence_length:
+            for i in range(len(episode) - self.sequence_length + 1):
+                sequence = episode[i:i + self.sequence_length]
+                if len(self.buffer) < self.capacity:
+                    self.buffer.append(None)
+                self.buffer[self.position] = sequence
+                self.position = (self.position + 1) % self.capacity
 
+    def sample(self):
+        """Sample a single sequence from the buffer."""
+        return random.choice(self.buffer)
 
-# DQN Agent with CNN + GRU
+    def __len__(self):
+        return len(self.buffer)
+
+# DQN Agent with CNN + GRU without batching
 class DQNAgent_GRU_CNN(Agent):
     def __init__(self, train_env, state_shape, action_size):
-        self.state_shape = state_shape
+        self.state_shape = state_shape  # Should be (sequence_length, state_dim)
         self.action_size = action_size
         self.learning_rate = hyperparams['learning_rate']
         self.discount_factor = hyperparams['discount_factor']
@@ -81,7 +105,8 @@ class DQNAgent_GRU_CNN(Agent):
         self.exploration_min = hyperparams['exploration_min']
         self.exploration_decay = hyperparams['exploration_decay']
 
-        state_dim = np.prod(state_shape)
+        state_dim = state_shape[-1]  # State dimension
+        self.sequence_length = hyperparams['sequence_length']
 
         # Initialize the CNN-GRU model
         self.model = DQN_GRU_CNN(state_dim, action_size).to(device)
@@ -91,8 +116,8 @@ class DQNAgent_GRU_CNN(Agent):
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
-        # Regular Replay Buffer
-        self.memory = ReplayBuffer(hyperparams['memory_size'])
+        # Replay Buffer that stores sequences
+        self.memory = ReplayBuffer(hyperparams['memory_size'], self.sequence_length)
         self.train_env = train_env
 
         # Initialize OnlineNormalization for normalizing states
@@ -106,54 +131,62 @@ class DQNAgent_GRU_CNN(Agent):
         if np.random.rand() <= self.exploration_rate:
             return np.random.randint(self.action_size), hidden_state
 
-        state_tensor = torch.FloatTensor(normalized_state).unsqueeze(0).to(device)
+        # Prepare the state tensor
+        state_tensor = torch.FloatTensor(normalized_state).unsqueeze(0).unsqueeze(0).to(device)  # Shape: (1, 1, state_dim)
         with torch.no_grad():
-            q_values, hidden_state = self.model(state_tensor, hidden_state)
-        return q_values.max(1)[1].item(), hidden_state
+            q_values, hidden_state = self.model(state_tensor.squeeze(0), hidden_state)
+        return q_values.argmax().item(), hidden_state
 
-    def remember(self, state, action, reward, next_state, done):
-        # Update and normalize both state and next_state before storing
-        self.normalizer.update(state)
-        self.normalizer.update(next_state)
+    def remember(self, episode_transitions):
+        # Update and normalize states in the episode
+        normalized_episode = []
+        for state, action, reward, next_state, done in episode_transitions:
+            self.normalizer.update(state)
+            self.normalizer.update(next_state)
 
-        normalized_state = self.normalizer.normalize(state)
-        normalized_next_state = self.normalizer.normalize(next_state)
+            normalized_state = self.normalizer.normalize(state)
+            normalized_next_state = self.normalizer.normalize(next_state)
 
-        # Store the transition in the replay buffer
-        self.memory.add(normalized_state, action, reward, normalized_next_state, done)
+            normalized_episode.append((normalized_state, action, reward, normalized_next_state, done))
+        # Store the normalized episode in the replay buffer
+        self.memory.add(normalized_episode)
 
     def learn(self):
         if len(self.memory) == 0:
             return
 
-        # Sample a single transition from the replay buffer
-        state, action, reward, next_state, done = self.memory.sample()
+        # Sample a single sequence from the replay buffer
+        sequence = self.memory.sample()
 
-        state = torch.FloatTensor(state).unsqueeze(0).to(device)
-        action = torch.LongTensor([action]).to(device)
-        reward = torch.FloatTensor([reward]).to(device)
-        next_state = torch.FloatTensor(next_state).unsqueeze(0).to(device)
-        done = torch.FloatTensor([done]).to(device)
+        states, actions, rewards, next_states, dones = zip(*sequence)
 
+        # Convert lists to tensors
+        state_sequence = torch.FloatTensor(np.stack(states)).to(device)  # Shape: (sequence_length, state_dim)
+        action_sequence = torch.LongTensor(actions).to(device)  # Shape: (sequence_length,)
+        reward_sequence = torch.FloatTensor(rewards).to(device)  # Shape: (sequence_length,)
+        next_state_sequence = torch.FloatTensor(np.stack(next_states)).to(device)
+        done_sequence = torch.FloatTensor(dones).to(device)
+
+        # Initialize hidden state
         hidden_state = None
 
-        # Main model Q-values for the current state
-        current_q_values, _ = self.model(state, hidden_state)
-        current_q_value = current_q_values.gather(1, action.unsqueeze(1)).squeeze(1)
+        # Compute current Q values for all time steps
+        current_q_values, _ = self.model(state_sequence, hidden_state)  # Output shape: (sequence_length, action_dim)
+        # Select the Q-values for the actions taken at each time step
+        current_q_values = current_q_values.gather(1, action_sequence.unsqueeze(1)).squeeze(1)
 
-        # Double DQN: use the main model to choose the best action for the next state
-        next_q_values_model, _ = self.model(next_state, hidden_state)
-        best_action = next_q_values_model.max(1)[1].unsqueeze(1)
+        # Compute next Q values using the target network only
+        with torch.no_grad():
+            next_q_values_target, _ = self.target_model(next_state_sequence, hidden_state)
+            next_q_values = next_q_values_target.max(1)[0]  # Select the max Q-value from the target model
 
-        # Use the target model to compute the target Q-value
-        next_q_values_target, _ = self.target_model(next_state, hidden_state)
-        next_q_value = next_q_values_target.gather(1, best_action).squeeze(1)
+        # Compute target Q values
+        target_q_values = reward_sequence + (1 - done_sequence) * self.discount_factor * next_q_values
 
-        target_q_value = reward + (1 - done) * self.discount_factor * next_q_value
+        # Compute loss over all time steps
+        loss = nn.MSELoss()(current_q_values, target_q_values.detach())
 
-        # Loss and backpropagation
-        loss = nn.MSELoss()(current_q_value, target_q_value)
-
+        # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
@@ -184,6 +217,8 @@ class DQNAgent_GRU_CNN(Agent):
 
             self.model.train()
 
+            episode_transitions = []  # Store transitions for the episode
+
             while not done:
                 # Choose action using the current policy
                 action, hidden_state = self.choose_action(state, hidden_state)
@@ -191,11 +226,8 @@ class DQNAgent_GRU_CNN(Agent):
                 done = terminated or truncated
                 next_state = next_state.flatten()
 
-                # Store transition in the replay memory
-                self.remember(state, action, reward, next_state, done)
-
-                # Learn from the replay buffer after each step
-                self.learn()
+                # Store transition
+                episode_transitions.append((state, action, reward, next_state, done))
 
                 # Track the action and portfolio value
                 episode_portfolio_values.append(info['portfolio_valuation'])  # Append portfolio value
@@ -203,6 +235,12 @@ class DQNAgent_GRU_CNN(Agent):
 
                 state = next_state
                 total_reward += reward
+
+                # Learn from the replay buffer after each step
+                self.learn()
+
+            # At the end of the episode, store the episode transitions in the replay buffer
+            self.remember(episode_transitions)
 
             if episode == n_episodes - 1:  # If it's the last episode, store the values and actions for plotting
                 last_episode_portfolio_values = episode_portfolio_values
@@ -214,23 +252,3 @@ class DQNAgent_GRU_CNN(Agent):
             print(f"Episode {episode + 1}/{n_episodes}, Total Reward: {total_reward}")
 
         return last_episode_portfolio_values, last_episode_actions  # Return values and actions from the last episode
-
-class ReplayBuffer:
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.buffer = []
-        self.position = 0
-
-    def add(self, state, action, reward, next_state, done):
-        if len(self.buffer) < self.capacity:
-            self.buffer.append(None)
-        self.buffer[self.position] = (state, action, reward, next_state, done)
-        self.position = (self.position + 1) % self.capacity
-
-    def sample(self):
-        # Sample a single transition
-        return random.choice(self.buffer)
-
-    def __len__(self):
-        return len(self.buffer)
-

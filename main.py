@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from stable_baselines3.common.vec_env import DummyVecEnv
 from device import device
+from models.dqn_cnn import DQNAgent_CNN
 from models.dqn_gru_cnn import DQNAgent_GRU_CNN
 from models.policy_gradient import PolicyGradientAgent
 from models.policy_gradient_gru import PolicyGradientAgent_GRU
@@ -79,11 +80,12 @@ def main(agent_type, interval_days, retrain, baseline):
     #set_all_seeds(hyperparams['seed'])
 
     tickers = [
+
         'GOOGL',
         'NFLX',
         'INTC',
-        'TSLA',
         'AAPL',
+        'TSLA'
 
         # 'ORCL',
         # 'ADBE',
@@ -297,16 +299,25 @@ def main(agent_type, interval_days, retrain, baseline):
 def initialize_agent(agent_type, env_train, state_shape, action_size):
     if agent_type == 'q-learning':
         return QLearningAgent(env_train, None, action_size)
+
     elif agent_type == 'dqn':
         return DQNAgent(env_train, state_shape, action_size)
+
     elif agent_type == 'dqn_gru':
         return DQNAgent_GRU(env_train, state_shape, action_size)
+
+    elif agent_type == 'dqn_cnn':
+        return DQNAgent_CNN(env_train, state_shape, action_size)
+
     elif agent_type == 'dqn_gru_cnn':
         return DQNAgent_GRU_CNN(env_train, state_shape, action_size)
+
     elif agent_type =='policy_gradient':
         return PolicyGradientAgent(env_train, state_shape, action_size)
+
     elif agent_type == 'policy_gradient_gru':
         return PolicyGradientAgent_GRU(env_train, state_shape, action_size)
+
     elif agent_type == 'policy_gradient_gru_cnn':
         return PolicyGradientAgent_GRU_CNN(env_train, state_shape, action_size)
     else:
@@ -387,6 +398,8 @@ def select_action(agent, agent_type, state):
         with torch.no_grad():
             if agent_type == 'dqn':
                 values_vec = agent.model(state_tensor).detach().cpu().numpy()[0]
+            elif agent_type == 'dqn_cnn':
+                values_vec = agent.model(state_tensor)
             else:
                 values_vec, _ = agent.model(state_tensor)
                 values_vec = values_vec.detach().cpu().numpy()[0]

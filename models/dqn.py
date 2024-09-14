@@ -9,7 +9,6 @@ from device import device
 from models.agent import Agent
 from online_normalization import OnlineNormalization
 
-
 # DQN model without normalization
 class DQN(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size):
@@ -18,12 +17,31 @@ class DQN(nn.Module):
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, action_dim)
 
-
     def forward(self, x):
         x = torch.relu(self.fc1(x))
         x = torch.relu(self.fc2(x))
         return self.fc3(x)
 
+# Replay Buffer class
+class ReplayBuffer:
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.buffer = []
+        self.position = 0
+
+    def add(self, state, action, reward, next_state, done):
+        """Add a transition to the buffer."""
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(None)
+        self.buffer[self.position] = (state, action, reward, next_state, done)
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self):
+        """Sample a single transition from the buffer."""
+        return random.choice(self.buffer)
+
+    def __len__(self):
+        return len(self.buffer)
 
 # DQN Agent
 class DQNAgent(Agent):
@@ -42,10 +60,11 @@ class DQNAgent(Agent):
         self.target_model.load_state_dict(self.model.state_dict())
         self.target_model.eval()
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.memory = []
+
+        # Initialize replay buffer
+        self.memory = ReplayBuffer(hyperparams['memory_size'])
 
         self.train_env = train_env
-        # self.test_env = test_env
 
         # Initialize OnlineNormalization for normalizing states
         self.normalizer = OnlineNormalization(state_dim)
@@ -71,42 +90,50 @@ class DQNAgent(Agent):
         normalized_state = self.normalizer.normalize(state)
         normalized_next_state = self.normalizer.normalize(next_state)
 
-        self.memory.append((normalized_state, action, reward, normalized_next_state, done))
-        if len(self.memory) > hyperparams['memory_size']:
-            self.memory.pop(0)
+        # Store the transition in the replay buffer
+        self.memory.add(normalized_state, action, reward, normalized_next_state, done)
 
-    def learn(self, batch_size):
-        if len(self.memory) < batch_size:
+    def learn(self):
+        if len(self.memory) == 0:
             return
 
-        batch = random.sample(self.memory, batch_size)
-        states = np.array([x[0] for x in batch])
-        actions = np.array([x[1] for x in batch])
-        rewards = np.array([x[2] for x in batch])
-        next_states = np.array([x[3] for x in batch])
-        dones = np.array([x[4] for x in batch])
+        # Sample a single transition from the replay buffer
+        state, action, reward, next_state, done = self.memory.sample()
 
-        states = torch.FloatTensor(states).to(device)
-        actions = torch.LongTensor(actions).to(device)
-        rewards = torch.FloatTensor(rewards).to(device)
-        next_states = torch.FloatTensor(next_states).to(device)
-        dones = torch.FloatTensor(dones).to(device)
+        state = torch.FloatTensor(state).unsqueeze(0).to(device)
+        action = torch.LongTensor([action]).to(device)
+        reward = torch.FloatTensor([reward]).to(device)
+        next_state = torch.FloatTensor(next_state).unsqueeze(0).to(device)
+        done = torch.FloatTensor([done]).to(device)
 
-        current_q_values = self.model(states).gather(1, actions.unsqueeze(1)).squeeze(1)
-        next_q_values = self.target_model(next_states).max(1)[0]
-        target_q_values = rewards + (1 - dones) * self.discount_factor * next_q_values
+        # Compute Q(s, a)
+        current_q_values = self.model(state).gather(1, action.unsqueeze(1)).squeeze(1)
 
-        loss = nn.MSELoss()(current_q_values, target_q_values)
+        # Double DQN: use the main model to select the best action in the next state
+        next_q_values_main = self.model(next_state)
+        next_actions = next_q_values_main.max(1)[1].unsqueeze(1)
+
+        # Use the target model to compute the target Q-values
+        next_q_values_target = self.target_model(next_state)
+        next_q_value = next_q_values_target.gather(1, next_actions).squeeze(1)
+
+        # Compute the target Q-value
+        target_q_value = reward + (1 - done) * self.discount_factor * next_q_value
+
+        # Compute loss
+        loss = nn.MSELoss()(current_q_values, target_q_value.detach())
+
+        # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
+        # Decay exploration rate
         self.exploration_rate = max(self.exploration_min, self.exploration_rate * self.exploration_decay)
 
     def update_target_model(self):
         self.target_model.load_state_dict(self.model.state_dict())
 
-    # Train agent
     # Train agent
     def train_agent(self):
         super().train_agent()
@@ -130,7 +157,7 @@ class DQNAgent(Agent):
                 next_state = next_state.flatten()
 
                 self.remember(state, action, reward, next_state, done)
-                self.learn(hyperparams['batch_size'])
+                self.learn()
 
                 # Track the action and portfolio value
                 episode_portfolio_values.append(info['portfolio_valuation'])  # Append portfolio value
@@ -152,20 +179,3 @@ class DQNAgent(Agent):
     # Test agent
     def test_agent(self):
         pass
-
-    def get_q_values(self, state):
-        """
-        Return Q-values for all actions based on the given state.
-        """
-        self.normalizer.update(state)
-        normalized_state = self.normalizer.normalize(state)
-
-        # Convert the state to a tensor and move to the appropriate device (CPU/GPU)
-        state_tensor = torch.FloatTensor(normalized_state).unsqueeze(0).to(device)
-
-        # Ensure no gradients are calculated during inference
-        with torch.no_grad():
-            q_values = self.model(state_tensor)
-
-        # Return the Q-values as a numpy array
-        return q_values.cpu().numpy().flatten()
