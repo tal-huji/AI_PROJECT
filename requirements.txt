@@ -1,0 +1,7 @@
+gym_trading_env==0.3.3
+matplotlib==3.7.1
+numpy==2.1.1
+pandas==2.2.2
+stable_baselines3==2.4.0a7
+torch==2.3.0+cu121
+yfinance==0.2.43
