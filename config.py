@@ -16,7 +16,7 @@ import numpy as np
 """
 # ----------------------------------------------
 
-INTERVAL_SIZE = 30 # 30 Also works well
+INTERVAL_SIZE = 30 # 60 Also works well
 hyperparams = {
     # ----------------------------------------------
 
