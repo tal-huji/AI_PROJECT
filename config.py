@@ -28,8 +28,8 @@ hyperparams = {
 
     'show_buy_sell_signals': True,
 
-    'start_year': '2024-01-01',
-    'end_year': None,
+    'start_year': '2022-01-01',
+    'end_year': '2024-01-01',
 
     'retrain': False, # For interval training
 
