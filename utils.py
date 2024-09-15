@@ -1,4 +1,4 @@
-
+import os
 import yfinance as yf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,7 +7,31 @@ from matplotlib.pyplot import title
 
 from config import hyperparams, dynamic_features_arr
 
+# Ensure the directory exists for saving the plots
+def ensure_directory_exists(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
+# Convert algorithm names to the desired format
+def convert_algorithm_name(algorithm):
+    algorithm_mapping = {
+        'q-learning': 'qlearning',
+        'dqn': 'dqn_regular',
+        'dqn_gru': 'dqn_gru',
+        'dqn_cnn': 'dqn_cnn',
+        'dqn_gru_cnn': 'dqn_gru_cnn',
+        'policy_gradient': 'policy_gradient_regular',
+        'policy_gradient_gru': 'policy_gradient_gru',
+        'policy_gradient_cnn': 'policy_gradient_cnn',
+        'policy_gradient_gru_cnn': 'policy_gradient_gru_cnn'
+    }
+    return algorithm_mapping.get(algorithm, algorithm)
+
+# Convert stock ticker to lowercase format (if necessary)
+def convert_stock_ticker(ticker):
+    return ticker.lower()
+
+# Function to create a hashable state
 def get_hashasble_state(state):
     if isinstance(state, np.ndarray):
         state = state.flatten()
@@ -26,8 +50,7 @@ def fetch_data(ticker, start, end):
     df = df[['open', 'high', 'low', 'close', 'volume']]
     return df.dropna()
 
-
-
+# Plot performance through time
 def plot_performance_through_time(
     ticker,
     df,
@@ -85,8 +108,9 @@ def plot_performance_through_time(
     # Plot the data
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    algorithm_name = hyperparams['algorithm']
-    baseline_name = hyperparams['baseline_algorithm']
+    algorithm_name = convert_algorithm_name(hyperparams['algorithm'])
+    baseline_name = convert_algorithm_name(hyperparams['baseline_algorithm'])
+    ticker_name = convert_stock_ticker(ticker)
 
     # Plot portfolio vs buy-hold values
     ax.plot(trading_dates, interpolated_portfolio_values, label=f'{algorithm_name} Portfolio Value', color='orange')
@@ -97,14 +121,12 @@ def plot_performance_through_time(
     if hyperparams['show_buy_sell_signals']:
         ax.plot(trading_dates, buy_signals, '^', markersize=2, color='green', label='Buy Signal', linestyle='None')
         ax.plot(trading_dates, sell_signals, 'o', markersize=2, color='black', label='Sell Signal', linestyle='None')
-        # ax.plot(trading_dates, buy_signals_baseline, '^', markersize=5, color='darkgreen', label=f'Buy Signal {baseline_name}', linestyle='None')
-        # ax.plot(trading_dates, sell_signals_baseline, 'o', markersize=5, color='gray', label=f'Sell Signal {baseline_name}', linestyle='None')
 
     # Set title and labels
     title = f'Interval: {interval}\n'
     title  += f'{ticker} - Yearly Performance - {algorithm_name.upper()} vs {baseline_name}'
 
-    title= add_params_to_title(title)
+    title = add_params_to_title(title)
 
     ax.set_title(title)
     ax.set_ylabel('Value (USD)')
@@ -117,10 +139,17 @@ def plot_performance_through_time(
     plt.xticks(rotation=45)
     plt.tight_layout()
 
+    # Ensure the directory for saving exists
+    output_directory = f'plots/{algorithm_name}'
+    ensure_directory_exists(output_directory)
+
+    # Save the plot as a PNG file (override if exists)
+    plt.savefig(f'{output_directory}/{algorithm_name}_{ticker_name}.png', dpi=300)
+
     # Show the plot
     plt.show()
 
-
+# Plot final results comparing different algorithms
 def plot_final_results(results, baseline_results):
     """
     Plot final results comparing algorithm performance vs buy-and-hold and a baseline.
@@ -155,14 +184,13 @@ def plot_final_results(results, baseline_results):
     x = np.arange(len(tickers))
     width = 0.25  # Reduced the width to fit three bars
 
-    algorithm_name = hyperparams['algorithm']
-    baseline_name = hyperparams['baseline_algorithm']
+    algorithm_name = convert_algorithm_name(hyperparams['algorithm'])
+    baseline_name = convert_algorithm_name(hyperparams['baseline_algorithm'])
 
     # Offset the bars for each group
     ax.bar(x - width, portfolio_returns, width, label=f'{algorithm_name.upper()} Portfolio Return (%) {total_portfolio_return:.2f}%', color='orange')
     ax.bar(x, buy_hold_returns, width, label=f'Buy-and-Hold Return (%) {total_buy_hold_return:.2f}%', color='blue')
     ax.bar(x + width, portfolio_returns_baseline, width, label=f'{baseline_name.upper()} Portfolio Return (%) {total_portfolio_return_baseline:.2f}%', color='purple')
-
 
     # Set title and labels
     ax.set_title(add_params_to_title(f'{algorithm_name.upper()} vs Buy-and-Hold vs {baseline_name.upper()} - Portfolio Return (%)'))
@@ -174,7 +202,14 @@ def plot_final_results(results, baseline_results):
 
     # Set the x-axis labels to be the tickers
     ax.set_xticks(x)
-    ax.set_xticklabels(tickers)
+    ax.set_xticklabels([convert_stock_ticker(ticker) for ticker in tickers])
+
+    # Ensure the directory for saving exists
+    output_directory = f'plots/{algorithm_name}'
+    ensure_directory_exists(output_directory)
+
+    # Save the plot as a PNG file (override if exists)
+    plt.savefig(f'{output_directory}/{algorithm_name}_comparison_bar.png', dpi=300)
 
     # Show the plot
     plt.xticks(rotation=45)
@@ -182,9 +217,9 @@ def plot_final_results(results, baseline_results):
     plt.show()
 
 
+# Helper function to add parameters to the title
 def add_params_to_title(initial_title):
-    title =initial_title
-
+    title = initial_title
     title += f' (Interval: {hyperparams["interval_days"]} days) | Episodes: {hyperparams["n_episodes"]} | Retrain: {hyperparams["retrain"]}\n'
 
     if 'policy' or 'dqn' in hyperparams['algorithm']:

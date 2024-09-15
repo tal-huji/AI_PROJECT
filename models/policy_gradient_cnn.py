@@ -9,33 +9,44 @@ from models.agent import Agent
 from online_normalization import OnlineNormalization
 
 
-# Policy Network
-class PolicyNetwork(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_size):
-        super(PolicyNetwork, self).__init__()
-        self.fc1 = nn.Linear(state_dim, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, action_dim)
+# CNN-based Policy Network for Policy Gradient
+class PolicyNetwork_CNN(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(PolicyNetwork_CNN, self).__init__()
+
+        hidden_size = hyperparams['hidden_layer_size']
+        num_filters = hyperparams.get('num_filters', 32)  # Number of convolution filters
+        kernel_size = hyperparams.get('kernel_size', 3)  # Size of the convolution kernel
+
+        self.conv1 = nn.Conv1d(in_channels=1, out_channels=num_filters, kernel_size=kernel_size)  # First convolutional layer
+        self.conv2 = nn.Conv1d(in_channels=num_filters, out_channels=num_filters, kernel_size=kernel_size)  # Second convolutional layer
+
+        self.fc1 = nn.Linear(num_filters * (state_dim - 2 * (kernel_size - 1)), hidden_size)  # Fully connected layer after convolutions
+        self.fc2 = nn.Linear(hidden_size, action_dim)  # Output layer for action probabilities
 
     def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        return torch.softmax(self.fc3(x), dim=-1)  # Output action probabilities
+        x = x.unsqueeze(1)  # Add a channel dimension for the convolution layers
+
+        x = torch.relu(self.conv1(x))  # Pass through the first convolutional layer
+        x = torch.relu(self.conv2(x))  # Pass through the second convolutional layer
+        x = x.view(x.size(0), -1)  # Flatten the output from the convolutional layers
+
+        x = torch.relu(self.fc1(x))  # Pass through the first fully connected layer
+        action_probs = torch.softmax(self.fc2(x), dim=-1)  # Output action probabilities
+        return action_probs  # Output the action probabilities
 
 
-# Policy Gradient Agent (REINFORCE)
-class PolicyGradientAgent(Agent):
+# CNN-based Policy Gradient Agent (REINFORCE with CNN)
+class PolicyGradientAgent_CNN(Agent):
     def __init__(self, train_env, state_shape, action_size):
         self.state_shape = state_shape
         self.action_size = action_size
         self.learning_rate = hyperparams['learning_rate']
         self.discount_factor = hyperparams['discount_factor']
-        self.exploration_rate = hyperparams['exploration_rate']
-        self.exploration_min = hyperparams['exploration_min']
-        self.exploration_decay = hyperparams['exploration_decay']
 
         state_dim = np.prod(state_shape)
-        self.model = PolicyNetwork(state_dim, action_size, hyperparams['hidden_layer_size']).to(device)
+
+        self.model = PolicyNetwork_CNN(state_dim, action_size).to(device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         self.memory = []
 
@@ -140,8 +151,7 @@ class PolicyGradientAgent(Agent):
                 last_episode_portfolio_values = episode_portfolio_values
                 last_episode_actions = episode_actions
 
-            if episode % 10 == 0:
-                print(f"Episode {episode + 1}/{n_episodes}, Total Reward: {total_reward}")
+            print(f"Episode {episode + 1}/{n_episodes}, Total Reward: {total_reward}")
 
         return last_episode_portfolio_values, last_episode_actions  # Return values and actions from the last episode
 

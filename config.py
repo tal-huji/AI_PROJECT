@@ -1,22 +1,35 @@
-# config.py
-from sympy.physics.units import years
 
 import dynamic_features
 import numpy as np
 
-INTERVAL_SIZE = 30
-hyperparams = {
-    'algorithm': 'policy_gradient_gru_cnn',
-    # q-learning, dqn, dqn_gru, dqn_gru_cnn, policy_gradient, policy_gradient_gru, policy_gradient_gru_cnn
+"""
+  Possible Algorithms:
+  q-learning,
+  dqn,
+  dqn_gru,
+  dqn_cnn,
+  dqn_gru_cnn,
+  policy_gradient,
+  policy_gradient_gru,
+  policy_gradient_gru_cnn,
+  policy_gradient_cnn **/
+"""
+# ----------------------------------------------
 
-    'baseline_algorithm': 'price_comparison',  # price_comparison
+INTERVAL_SIZE = 30 # 30 Also works well
+hyperparams = {
+    # ----------------------------------------------
+
+    'algorithm': 'dqn_gru_cnn',
+
+    'baseline_algorithm': 'price_comparison',  # price_comparison, more could be added
     'interval_days': INTERVAL_SIZE,
     'baseline_interval_days': INTERVAL_SIZE,
 
     'show_buy_sell_signals': True,
 
-    'start_year': '2022-01-01',
-    'end_year': '2024-01-01',
+    'start_year': '2024-01-01',
+    'end_year': None,
 
     'retrain': False, # For interval training
 

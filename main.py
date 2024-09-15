@@ -8,6 +8,7 @@ from device import device
 from models.dqn_cnn import DQNAgent_CNN
 from models.dqn_gru_cnn import DQNAgent_GRU_CNN
 from models.policy_gradient import PolicyGradientAgent
+from models.policy_gradient_cnn import PolicyGradientAgent_CNN
 from models.policy_gradient_gru import PolicyGradientAgent_GRU
 
 from models.policy_gradient_gru_cnn import PolicyGradientAgent_GRU_CNN
@@ -87,11 +88,11 @@ def main(agent_type, interval_days, retrain, baseline):
         'AAPL',
         'TSLA'
 
-        # 'ORCL',
-        # 'ADBE',
-        # 'MSFT',
-        # 'QCOM',
-        # 'CRM',
+        'ORCL',
+        'ADBE',
+        'MSFT',
+        'QCOM',
+        'CRM',
         # 'BTC-USD',
         # 'ETH-USD',
         # 'LTC-USD',
@@ -315,6 +316,9 @@ def initialize_agent(agent_type, env_train, state_shape, action_size):
     elif agent_type =='policy_gradient':
         return PolicyGradientAgent(env_train, state_shape, action_size)
 
+    elif agent_type == 'policy_gradient_cnn':
+        return PolicyGradientAgent_CNN(env_train, state_shape, action_size)
+
     elif agent_type == 'policy_gradient_gru':
         return PolicyGradientAgent_GRU(env_train, state_shape, action_size)
 
@@ -357,11 +361,11 @@ def test_agent(agent, env_test, agent_type):
         agent.model.eval()
         agent.target_model.eval()
 
-    if agent_type in ['policy_gradient', 'policy_gradient_gru']:
+    if 'policy_gradient' in agent_type:
         agent.model.eval()
 
     while not done:
-        if agent_type != 'simple' and agent_type != 'price_comparison':
+        if agent_type != 'simple' and agent_type != 'price_comparison' and  agent_type != 'dqn_cnn':
             q_values = select_action(agent, agent_type, state)
             action = np.argmax(q_values)
         else:
@@ -405,7 +409,7 @@ def select_action(agent, agent_type, state):
                 values_vec = values_vec.detach().cpu().numpy()[0]
 
     elif 'policy_gradient' in agent_type:
-        if agent_type == 'policy_gradient':
+        if agent_type == 'policy_gradient' or agent_type == 'policy_gradient_cnn':
             values_vec = agent.get_action_probabilities(state)
         else:
             values_vec, _ = agent.get_action_probabilities(state, hidden_state=None)
