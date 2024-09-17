@@ -19,6 +19,8 @@ python main.py
 
 This project explores the application of reinforcement learning (RL) to stock portfolio management, with a focus on interval-based training strategies. By dividing the trading period into fixed intervals, we evaluate whether an agent should be retrained from scratch for each interval or retain knowledge across intervals. The project compares various reinforcement learning models to assess their performance in a dynamic trading environment.
 
+![Interval Based](interval_based.png)
+
 ## Models and Results
 
 We evaluated several reinforcement learning models, but the **DQN-GRU-CNN** model performed best. Below are the main results:
